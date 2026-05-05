@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TDE Processamento de Imagens</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-content">
+        <h1 class="nav-title">TDE Levi</h1>
+        <!-- <ul class="nav-links">
+          <li><a id="blendimages" href="#" class="active">Editor</a></li>
+        </ul> -->
+      </div>
+    </nav>
+
+    <div class="main-container">
+      <div class="left-panel">
+        <div class="images-wrapper">
+          <div class="image-card">
+            <h2>Imagem 1 (Base)</h2>
+            <div class="file-input-wrapper">
+              <input type="file" id="buttonimage1" accept="image/*" />
+            </div>
+            <div class="preview-container">
+              <img id="preview1" />
+            </div>
+          </div>
+
+          <div class="image-card">
+            <h2>Imagem 2 (Mesclagem)</h2>
+            <div class="file-input-wrapper">
+              <input type="file" id="buttonimage2" accept="image/*" />
+            </div>
+            <div class="preview-container">
+              <img id="preview2" />
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-wrapper">
+          <div class="control-group">
+            <h3>Operações entre Imagens</h3>
+            <div class="buttons">
+              <button
+                class="btn btn-primary"
+                id="buttonadd"
+                onclick="addImages()"
+              >
+                Somar Imagens
+              </button>
+              <button
+                class="btn btn-secondary"
+                id="buttonsubtract"
+                onclick="subtractImages()"
+              >
+                Subtrair Imagens
+              </button>
+              <button
+                class="btn btn-action"
+                id="buttondifference"
+                onclick="differenceImages()"
+              >
+                Diferença
+              </button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <h3>Operações com Constante (Imagem 1)</h3>
+            <div class="constant-input-group">
+              <label for="constantValue">Valor Constante:</label>
+              <input type="number" id="constantValue" value="50" step="1" />
+            </div>
+            <div class="buttons grid-buttons">
+              <button class="btn btn-action" onclick="processConstant('add')">
+                Aumentar Brilho (+)
+              </button>
+              <button
+                class="btn btn-action"
+                onclick="processConstant('subtract')"
+              >
+                Diminuir Brilho (-)
+              </button>
+              <button
+                class="btn btn-action"
+                onclick="processConstant('multiply')"
+              >
+                Contraste (x)
+              </button>
+              <button
+                class="btn btn-action"
+                onclick="processConstant('divide')"
+              >
+                Contraste (÷)
+              </button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <h3>Transformações (Imagem 1)</h3>
+            <div class="buttons grid-buttons">
+              <button
+                class="btn btn-action"
+                onclick="transformImage('grayscale')"
+              >
+                Escala de Cinza
+              </button>
+              <button class="btn btn-action" onclick="transformImage('flipH')">
+                Inverter Horizontal
+              </button>
+              <button class="btn btn-action" onclick="transformImage('flipV')">
+                Inverter Vertical
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="right-panel">
+        <div class="result-card">
+          <h2>Resultado</h2>
+          <div class="canvas-container">
+            <canvas id="resultCanvas"></canvas>
+          </div>
+          <div
+            style="margin-top: 1.5rem; display: flex; justify-content: center"
+          >
+            <button class="btn btn-primary" onclick="exportImage()">
+              Exportar Imagem Final
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="logic.js"></script>
+  </body>
+</html>
