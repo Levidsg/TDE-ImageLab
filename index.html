@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TDE Processamento de Imagens</title>
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -17,14 +16,12 @@
     <nav class="navbar">
       <div class="nav-content">
         <h1 class="nav-title">TDE Levi</h1>
-        <!-- <ul class="nav-links">
-          <li><a id="blendimages" href="#" class="active">Editor</a></li>
-        </ul> -->
       </div>
     </nav>
 
     <div class="main-container">
       <div class="left-panel">
+        <!-- Imagens -->
         <div class="images-wrapper">
           <div class="image-card">
             <h2>Imagem 1 (Base)</h2>
@@ -35,7 +32,6 @@
               <img id="preview1" />
             </div>
           </div>
-
           <div class="image-card">
             <h2>Imagem 2 (Mesclagem)</h2>
             <div class="file-input-wrapper">
@@ -47,85 +43,192 @@
           </div>
         </div>
 
-        <div class="controls-wrapper">
-          <div class="control-group">
-            <h3>Operações entre Imagens</h3>
-            <div class="buttons">
-              <button
-                class="btn btn-primary"
-                id="buttonadd"
-                onclick="addImages()"
-              >
-                Somar Imagens
+        <!-- Abas -->
+        <div class="tabs-card">
+          <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab('imagens')">
+              Entre Imagens
+            </button>
+            <button class="tab-btn" onclick="switchTab('logicas')">
+              Lógicas
+            </button>
+            <button class="tab-btn" onclick="switchTab('ponto')">
+              Por Ponto
+            </button>
+            <button class="tab-btn" onclick="switchTab('transformacoes')">
+              Transformações
+            </button>
+          </div>
+
+          <!-- Aba: Entre Imagens -->
+          <div class="tab-panel active" id="tab-imagens">
+            <div class="control-group">
+              <h3>Operações Básicas</h3>
+              <div class="buttons">
+                <button class="btn btn-primary" onclick="addImages()">
+                  Somar
+                </button>
+                <button class="btn btn-secondary" onclick="subtractImages()">
+                  Subtrair
+                </button>
+                <button class="btn btn-secondary" onclick="differenceImages()">
+                  Diferença
+                </button>
+              </div>
+            </div>
+            <div class="control-group">
+              <h3>Blending</h3>
+              <div class="inline-inputs">
+                <label
+                  >α
+                  <input
+                    type="number"
+                    id="blendAlpha"
+                    value="0.5"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                /></label>
+                <label
+                  >β
+                  <input
+                    type="number"
+                    id="blendBeta"
+                    value="0.5"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                /></label>
+              </div>
+              <button class="btn btn-primary" onclick="blendImages()">
+                Aplicar Blending
               </button>
-              <button
-                class="btn btn-secondary"
-                id="buttonsubtract"
-                onclick="subtractImages()"
-              >
-                Subtrair Imagens
-              </button>
-              <button
-                class="btn btn-action"
-                id="buttondifference"
-                onclick="differenceImages()"
-              >
-                Diferença
+            </div>
+            <div class="control-group">
+              <h3>Média</h3>
+              <button class="btn btn-primary" onclick="averageImages()">
+                Calcular Média
               </button>
             </div>
           </div>
 
-          <div class="control-group">
-            <h3>Operações com Constante (Imagem 1)</h3>
-            <div class="constant-input-group">
-              <label for="constantValue">Valor Constante:</label>
-              <input type="number" id="constantValue" value="50" step="1" />
-            </div>
-            <div class="buttons grid-buttons">
-              <button class="btn btn-action" onclick="processConstant('add')">
-                Aumentar Brilho (+)
-              </button>
-              <button
-                class="btn btn-action"
-                onclick="processConstant('subtract')"
-              >
-                Diminuir Brilho (-)
-              </button>
-              <button
-                class="btn btn-action"
-                onclick="processConstant('multiply')"
-              >
-                Contraste (x)
-              </button>
-              <button
-                class="btn btn-action"
-                onclick="processConstant('divide')"
-              >
-                Contraste (÷)
-              </button>
+          <!-- Aba: Lógicas -->
+          <div class="tab-panel" id="tab-logicas">
+            <div class="control-group">
+              <h3>Operações Lógicas</h3>
+              <div class="buttons grid-buttons">
+                <button class="btn btn-logic" onclick="logicalOperation('and')">
+                  AND
+                </button>
+                <button class="btn btn-logic" onclick="logicalOperation('or')">
+                  OR
+                </button>
+                <button class="btn btn-logic" onclick="logicalOperation('not')">
+                  NOT (I1)
+                </button>
+                <button class="btn btn-logic" onclick="logicalOperation('xor')">
+                  XOR
+                </button>
+              </div>
             </div>
           </div>
 
-          <div class="control-group">
-            <h3>Transformações (Imagem 1)</h3>
-            <div class="buttons grid-buttons">
-              <button
-                class="btn btn-action"
-                onclick="transformImage('grayscale')"
-              >
-                Escala de Cinza
+          <!-- Aba: Por Ponto -->
+          <div class="tab-panel" id="tab-ponto">
+            <div class="control-group">
+              <h3>Limiarização</h3>
+              <div class="constant-input-group">
+                <label for="thresholdValue">Limiar (0–255):</label>
+                <input
+                  type="number"
+                  id="thresholdValue"
+                  value="127"
+                  min="0"
+                  max="255"
+                  step="1"
+                />
+              </div>
+              <button class="btn btn-action" onclick="thresholdImage()">
+                Aplicar
               </button>
-              <button class="btn btn-action" onclick="transformImage('flipH')">
-                Inverter Horizontal
+            </div>
+            <div class="control-group">
+              <h3>Negativo</h3>
+              <button class="btn btn-action" onclick="negativeImage()">
+                Gerar Negativo
               </button>
-              <button class="btn btn-action" onclick="transformImage('flipV')">
-                Inverter Vertical
+            </div>
+            <div class="control-group">
+              <h3>Equalização de Histograma</h3>
+              <button class="btn btn-action" onclick="equalizeHistogram()">
+                Equalizar
               </button>
+              <div class="histogram-wrapper">
+                <canvas id="histogramCanvas" width="480" height="120"></canvas>
+              </div>
+            </div>
+            <div class="control-group">
+              <h3>Operações com Constante</h3>
+              <div class="constant-input-group">
+                <label for="constantValue">Valor:</label>
+                <input type="number" id="constantValue" value="50" step="1" />
+              </div>
+              <div class="buttons grid-buttons">
+                <button class="btn btn-action" onclick="processConstant('add')">
+                  Brilho +
+                </button>
+                <button
+                  class="btn btn-action"
+                  onclick="processConstant('subtract')"
+                >
+                  Brilho −
+                </button>
+                <button
+                  class="btn btn-action"
+                  onclick="processConstant('multiply')"
+                >
+                  Contraste ×
+                </button>
+                <button
+                  class="btn btn-action"
+                  onclick="processConstant('divide')"
+                >
+                  Contraste ÷
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Aba: Transformações -->
+          <div class="tab-panel" id="tab-transformacoes">
+            <div class="control-group">
+              <h3>Transformações Geométricas</h3>
+              <div class="buttons grid-buttons">
+                <button
+                  class="btn btn-action"
+                  onclick="transformImage('grayscale')"
+                >
+                  Escala de Cinza
+                </button>
+                <button
+                  class="btn btn-action"
+                  onclick="transformImage('flipH')"
+                >
+                  Flip Horizontal
+                </button>
+                <button
+                  class="btn btn-action"
+                  onclick="transformImage('flipV')"
+                >
+                  Flip Vertical
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- Resultado -->
       <div class="right-panel">
         <div class="result-card">
           <h2>Resultado</h2>
