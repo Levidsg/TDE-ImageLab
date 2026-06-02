@@ -58,6 +58,9 @@
             <button class="tab-btn" onclick="switchTab('transformacoes')">
               Transformações
             </button>
+            <button class="tab-btn" onclick="switchTab('filtros')">
+              Filtros
+            </button>
           </div>
 
           <!-- Aba: Entre Imagens -->
@@ -225,6 +228,226 @@
               </div>
             </div>
           </div>
+
+          <!-- Aba: Filtros ─────────────────────────────────────────────────── -->
+          <div class="tab-panel" id="tab-filtros">
+            <!-- MAX -->
+            <div class="control-group">
+              <h3>Filtro MAX</h3>
+              <p class="filter-desc">
+                Substitui o pixel pelo <strong>maior</strong> valor da
+                vizinhança. Realça regiões claras.
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeMax"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="1"
+                  oninput="updateMaskLabel('maskSizeMax', 'maskLabelMax')"
+                />
+                <span class="slider-val" id="maskLabelMax">3×3</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterMax()">
+                Aplicar MAX
+              </button>
+            </div>
+
+            <!-- MIN -->
+            <div class="control-group">
+              <h3>Filtro MIN</h3>
+              <p class="filter-desc">
+                Substitui o pixel pelo <strong>menor</strong> valor da
+                vizinhança. Realça regiões escuras.
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeMin"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="1"
+                  oninput="updateMaskLabel('maskSizeMin', 'maskLabelMin')"
+                />
+                <span class="slider-val" id="maskLabelMin">3×3</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterMin()">
+                Aplicar MIN
+              </button>
+            </div>
+
+            <!-- MEAN -->
+            <div class="control-group">
+              <h3>Filtro MEAN (Média)</h3>
+              <p class="filter-desc">
+                Substitui o pixel pela <strong>média aritmética</strong> da
+                vizinhança. Suavização linear.
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeMean"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="1"
+                  oninput="updateMaskLabel('maskSizeMean', 'maskLabelMean')"
+                />
+                <span class="slider-val" id="maskLabelMean">3×3</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterMean()">
+                Aplicar MEAN
+              </button>
+            </div>
+
+            <!-- MEDIANA -->
+            <div class="control-group">
+              <h3>Filtro MEDIANA</h3>
+              <p class="filter-desc">
+                Ordena a vizinhança e usa o valor central. Excelente para
+                remover <strong>ruído sal-e-pimenta</strong>.
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeMedian"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="1"
+                  oninput="updateMaskLabel('maskSizeMedian', 'maskLabelMedian')"
+                />
+                <span class="slider-val" id="maskLabelMedian">3×3</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterMedian()">
+                Aplicar MEDIANA
+              </button>
+            </div>
+
+            <!-- ORDEM -->
+            <div class="control-group">
+              <h3>Filtro ORDEM</h3>
+              <p class="filter-desc">
+                Seleciona o <strong>k-ésimo</strong> valor da vizinhança
+                ordenada (k=1 → mín, k=N²/2 → mediana, k=N² → máx).
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeOrder"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="1"
+                  oninput="
+                    updateMaskLabel('maskSizeOrder', 'maskLabelOrder');
+                    updateOrderKRange();
+                  "
+                />
+                <span class="slider-val" id="maskLabelOrder">3×3</span>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" id="orderKLabel">k = 5</span>
+                <input
+                  type="range"
+                  id="orderK"
+                  min="1"
+                  max="9"
+                  step="1"
+                  value="5"
+                  oninput="updateOrderKLabel()"
+                />
+                <span class="slider-val" id="orderKVal">5</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterOrder()">
+                Aplicar ORDEM
+              </button>
+            </div>
+
+            <!-- SUAVIZAÇÃO CONSERVATIVA -->
+            <div class="control-group">
+              <h3>Suavização Conservativa</h3>
+              <p class="filter-desc">
+                Preserva o pixel se estiver entre min e max dos vizinhos. Caso
+                contrário, <strong>clipa</strong> ao limite mais próximo.
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeConservative"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="1"
+                  oninput="
+                    updateMaskLabel(
+                      'maskSizeConservative',
+                      'maskLabelConservative',
+                    )
+                  "
+                />
+                <span class="slider-val" id="maskLabelConservative">3×3</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterConservative()">
+                Aplicar Conservativo
+              </button>
+            </div>
+
+            <!-- GAUSSIANO -->
+            <div class="control-group">
+              <h3>Filtro Gaussiano</h3>
+              <p class="filter-desc">
+                Convolução com kernel Gaussiano. Suaviza preservando bordas
+                melhor que a média simples.
+              </p>
+              <div class="slider-row">
+                <span class="slider-label">Máscara</span>
+                <input
+                  type="range"
+                  id="maskSizeGaussian"
+                  min="1"
+                  max="3"
+                  step="1"
+                  value="2"
+                  oninput="
+                    updateMaskLabel('maskSizeGaussian', 'maskLabelGaussian')
+                  "
+                />
+                <span class="slider-val" id="maskLabelGaussian">5×5</span>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label"
+                  >σ = <span id="sigmaVal">1.0</span></span
+                >
+                <input
+                  type="range"
+                  id="gaussianSigma"
+                  min="0.1"
+                  max="5"
+                  step="0.1"
+                  value="1.0"
+                  oninput="
+                    document.getElementById('sigmaVal').textContent =
+                      parseFloat(this.value).toFixed(1)
+                  "
+                />
+                <span class="slider-val">5.0</span>
+              </div>
+              <button class="btn btn-filter" onclick="filterGaussian()">
+                Aplicar Gaussiano
+              </button>
+            </div>
+          </div>
+          <!-- /tab-filtros -->
         </div>
       </div>
 

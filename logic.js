@@ -75,18 +75,27 @@ function getSourceData(requireBoth = false) {
   canvas.width = width;
   canvas.height = height;
 
+  // Canvas offscreen para leitura — nunca toca o canvas de resultado
+  const offscreen = document.createElement("canvas");
+  offscreen.width = width;
+  offscreen.height = height;
+  const offCtx = offscreen.getContext("2d");
+
+  // data1: usa currentImageData se existir, senão lê do preview1
   let data1;
   if (currentImageData) {
     data1 = currentImageData;
   } else {
-    ctx.drawImage(preview1, 0, 0);
-    data1 = ctx.getImageData(0, 0, width, height);
+    offCtx.drawImage(preview1, 0, 0);
+    data1 = offCtx.getImageData(0, 0, width, height);
   }
 
+  // data2: SEMPRE lê do preview2 via offscreen (nunca do canvas principal)
   let data2 = null;
   if (requireBoth) {
-    ctx.drawImage(preview2, 0, 0);
-    data2 = ctx.getImageData(0, 0, width, height);
+    offCtx.clearRect(0, 0, width, height);
+    offCtx.drawImage(preview2, 0, 0);
+    data2 = offCtx.getImageData(0, 0, width, height);
   }
 
   return { width, height, data1, data2 };
@@ -142,9 +151,7 @@ function differenceImages() {
   processImages("difference");
 }
 
-// ─── 9) Combinação Linear (Blending) ────────────────────────────────────────
-// f(x,y) = α·I1(x,y) + β·I2(x,y)   onde α e β são livres
-
+// ─── Blending ────────────────────────────────────────────────────────────────
 function blendImages() {
   const src = getSourceData(true);
   if (!src) return;
@@ -179,9 +186,7 @@ function blendImages() {
   commitResult(result);
 }
 
-// ─── 10) Combinação Linear — Média das duas imagens ───────────────────────
-// f(x,y) = 0.5·I1(x,y) + 0.5·I2(x,y)
-
+// ─── Média das duas imagens ───────────────────────────────────────────────────
 function averageImages() {
   const src = getSourceData(true);
   if (!src) return;
@@ -202,9 +207,7 @@ function averageImages() {
   commitResult(result);
 }
 
-// ─── 11) Operações Lógicas em Imagens Binárias ───────────────────────────────
-// Binariza primeiro (pixel > 127 → 255, senão → 0) e depois aplica lógica.
-
+// ─── Operações Lógicas ───────────────────────────────────────────────────────
 function toBinary(data) {
   const out = new Uint8ClampedArray(data.data.length);
   for (let i = 0; i < data.data.length; i += 4) {
@@ -220,7 +223,6 @@ function toBinary(data) {
 }
 
 function logicalOperation(mode) {
-  // NOT só precisa de imagem 1
   const needsBoth = mode !== "not";
   const src = getSourceData(needsBoth);
   if (!src) return;
@@ -232,7 +234,7 @@ function logicalOperation(mode) {
   const result = ctx.createImageData(width, height);
 
   for (let i = 0; i < bin1.length; i += 4) {
-    const a = bin1[i]; // 0 ou 255
+    const a = bin1[i];
     const b = needsBoth ? bin2[i] : 0;
 
     let val;
@@ -248,9 +250,7 @@ function logicalOperation(mode) {
   commitResult(result);
 }
 
-// ─── 12) Limiarização (Threshold) ────────────────────────────────────────────
-// Pixels com intensidade > limiar → 255 (branco), caso contrário → 0 (preto)
-
+// ─── Limiarização ─────────────────────────────────────────────────────────────
 function thresholdImage() {
   const src = getSourceData();
   if (!src) return;
@@ -277,9 +277,7 @@ function thresholdImage() {
   commitResult(result);
 }
 
-// ─── 13) Negativo da Imagem ───────────────────────────────────────────────────
-// f(x,y) = 255 − I(x,y)
-
+// ─── Negativo ─────────────────────────────────────────────────────────────────
 function negativeImage() {
   const src = getSourceData();
   if (!src) return;
@@ -296,16 +294,13 @@ function negativeImage() {
   commitResult(result);
 }
 
-// ─── 14) Equalização de Histograma ───────────────────────────────────────────
-// Opera em escala de cinza. Calcula histograma → CDF → mapeamento de níveis.
-
+// ─── Equalização de Histograma ───────────────────────────────────────────────
 function equalizeHistogram() {
   const src = getSourceData();
   if (!src) return;
   const { width, height, data1 } = src;
   const total = width * height;
 
-  // 1. Converter para escala de cinza e coletar histograma
   const gray = new Uint8Array(total);
   const hist = new Array(256).fill(0);
 
@@ -319,21 +314,17 @@ function equalizeHistogram() {
     hist[g]++;
   }
 
-  // 2. CDF (função de distribuição acumulada)
   const cdf = new Array(256).fill(0);
   cdf[0] = hist[0];
   for (let k = 1; k < 256; k++) cdf[k] = cdf[k - 1] + hist[k];
 
-  // Encontra o primeiro valor não-zero da CDF
   const cdfMin = cdf.find((v) => v > 0);
 
-  // 3. Tabela de mapeamento
   const map = new Array(256).fill(0);
   for (let k = 0; k < 256; k++) {
     map[k] = Math.round(((cdf[k] - cdfMin) / (total - cdfMin)) * 255);
   }
 
-  // 4. Aplicar mapeamento
   const result = ctx.createImageData(width, height);
   for (let i = 0, p = 0; i < data1.data.length; i += 4, p++) {
     const eq = map[gray[p]];
@@ -344,8 +335,6 @@ function equalizeHistogram() {
   }
 
   commitResult(result);
-
-  // Desenha histograma antes/depois no canvas auxiliar
   drawHistograms(hist, map, gray, total);
 }
 
@@ -356,7 +345,6 @@ function drawHistograms(histBefore, map, grayPixels, total) {
   const W = hCanvas.width;
   const H = hCanvas.height;
 
-  // Histograma após
   const histAfter = new Array(256).fill(0);
   for (let p = 0; p < grayPixels.length; p++) histAfter[map[grayPixels[p]]]++;
 
@@ -386,7 +374,6 @@ function drawHistograms(histBefore, map, grayPixels, total) {
 }
 
 // ─── Operações com Constante ─────────────────────────────────────────────────
-
 function processConstant(mode) {
   const src = getSourceData();
   if (!src) return;
@@ -437,7 +424,6 @@ function processConstant(mode) {
 }
 
 // ─── Transformações ──────────────────────────────────────────────────────────
-
 function transformImage(mode) {
   const src = getSourceData();
   if (!src) return;
@@ -457,22 +443,22 @@ function transformImage(mode) {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = (y * width + x) * 4;
-        const src = (y * width + (width - 1 - x)) * 4;
-        result.data[i] = data1.data[src];
-        result.data[i + 1] = data1.data[src + 1];
-        result.data[i + 2] = data1.data[src + 2];
-        result.data[i + 3] = data1.data[src + 3];
+        const s = (y * width + (width - 1 - x)) * 4;
+        result.data[i] = data1.data[s];
+        result.data[i + 1] = data1.data[s + 1];
+        result.data[i + 2] = data1.data[s + 2];
+        result.data[i + 3] = data1.data[s + 3];
       }
     }
   } else if (mode === "flipV") {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = (y * width + x) * 4;
-        const src = ((height - 1 - y) * width + x) * 4;
-        result.data[i] = data1.data[src];
-        result.data[i + 1] = data1.data[src + 1];
-        result.data[i + 2] = data1.data[src + 2];
-        result.data[i + 3] = data1.data[src + 3];
+        const s = ((height - 1 - y) * width + x) * 4;
+        result.data[i] = data1.data[s];
+        result.data[i + 1] = data1.data[s + 1];
+        result.data[i + 2] = data1.data[s + 2];
+        result.data[i + 3] = data1.data[s + 3];
       }
     }
   }
@@ -480,8 +466,301 @@ function transformImage(mode) {
   commitResult(result);
 }
 
-// ─── Exportar ────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── FILTROS ESPACIAIS (Tarefa 15–19) ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
 
+// ── Utilitários de vizinhança ─────────────────────────────────────────────────
+
+/**
+ * Retorna os valores de cinza (ou canal) de uma janela MxN centrada em (cx, cy).
+ * Usa padding por replicação de borda (clamp).
+ */
+function getNeighborhood(data, width, height, cx, cy, maskW, maskH, channel) {
+  const half_w = Math.floor(maskW / 2);
+  const half_h = Math.floor(maskH / 2);
+  const values = [];
+
+  for (let dy = -half_h; dy <= half_h; dy++) {
+    for (let dx = -half_w; dx <= half_w; dx++) {
+      const nx = Math.min(Math.max(cx + dx, 0), width - 1);
+      const ny = Math.min(Math.max(cy + dy, 0), height - 1);
+      values.push(data[(ny * width + nx) * 4 + channel]);
+    }
+  }
+  return values;
+}
+
+/** Lê tamanho da máscara do slider: posição 1→3, 2→5, 3→7 */
+function getMaskSize(sliderId) {
+  const pos = parseInt(document.getElementById(sliderId).value);
+  return pos * 2 + 1; // 1→3, 2→5, 3→7
+}
+
+/** Atualiza o label do slider de máscara */
+function updateMaskLabel(sliderId, labelId) {
+  const size = getMaskSize(sliderId);
+  document.getElementById(labelId).textContent = size + "×" + size;
+}
+
+/** Atualiza range e label do slider k do filtro ORDEM */
+function updateOrderKRange() {
+  const m = getMaskSize("maskSizeOrder");
+  const total = m * m;
+  const input = document.getElementById("orderK");
+  input.max = total;
+  if (parseInt(input.value) > total) input.value = Math.ceil(total / 2);
+  updateOrderKLabel();
+}
+
+function updateOrderKLabel() {
+  const v = document.getElementById("orderK").value;
+  document.getElementById("orderKVal").textContent = v;
+  document.getElementById("orderKLabel").textContent = "k = " + v;
+}
+
+// ─── 15a) Filtro MAX ──────────────────────────────────────────────────────────
+// Substitui o pixel pelo valor máximo da vizinhança → realça regiões claras.
+function filterMax() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+  const m = getMaskSize("maskSizeMax");
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
+        result.data[idx + c] = Math.max(...nb);
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── 15b) Filtro MIN ──────────────────────────────────────────────────────────
+// Substitui o pixel pelo valor mínimo da vizinhança → realça regiões escuras.
+function filterMin() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+  const m = getMaskSize("maskSizeMin");
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
+        result.data[idx + c] = Math.min(...nb);
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── 15c) Filtro MEAN (Média) ─────────────────────────────────────────────────
+// Substitui o pixel pela média aritmética da vizinhança → suavização linear.
+function filterMean() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+  const m = getMaskSize("maskSizeMean");
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
+        const avg = nb.reduce((a, b) => a + b, 0) / nb.length;
+        result.data[idx + c] = Math.round(avg);
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── 16) Filtro MEDIANA ───────────────────────────────────────────────────────
+// Remove ruído sal-e-pimenta: substitui pixel pela mediana da vizinhança.
+// Preserva bordas melhor que a média.
+function filterMedian() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+  const m = getMaskSize("maskSizeMedian");
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const nb = getNeighborhood(
+          data1.data,
+          width,
+          height,
+          x,
+          y,
+          m,
+          m,
+          c,
+        ).sort((a, b) => a - b);
+        const mid = Math.floor(nb.length / 2);
+        result.data[idx + c] = nb[mid];
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── 17) Filtro ORDEM ─────────────────────────────────────────────────────────
+// Ordena os pixels da vizinhança e seleciona o k-ésimo valor.
+// k=1 → mínimo, k=N²/2 → mediana, k=N² → máximo.
+function filterOrder() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+  const m = getMaskSize("maskSizeOrder");
+  const k = parseInt(document.getElementById("orderK").value);
+  const total = m * m;
+
+  if (isNaN(k) || k < 1 || k > total) {
+    alert(`k deve estar entre 1 e ${total} para uma máscara ${m}×${m}.`);
+    return;
+  }
+
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const nb = getNeighborhood(
+          data1.data,
+          width,
+          height,
+          x,
+          y,
+          m,
+          m,
+          c,
+        ).sort((a, b) => a - b);
+        result.data[idx + c] = nb[k - 1]; // k é 1-indexado
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── 18) Suavização Conservativa ─────────────────────────────────────────────
+// Preserva o pixel central se ele já estiver entre min e max da vizinhança.
+// Se cp > max → cp = max; se cp < min → cp = min.
+// Implementado conforme o algoritmo do slide (imagem 1 da tarefa).
+function filterConservative() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+  const m = getMaskSize("maskSizeConservative");
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        // Vizinhança exclui o pixel central (apenas os vizinhos ao redor)
+        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
+        const cp = data1.data[idx + c];
+        const half = Math.floor(m / 2);
+        // Remove o centro da lista para calcular min/max apenas dos vizinhos
+        const centerIdx = half * m + half;
+        const neighbors = nb.filter((_, i) => i !== centerIdx);
+
+        const mn = Math.min(...neighbors);
+        const mx = Math.max(...neighbors);
+
+        let newVal = cp;
+        if (cp > mx) newVal = mx;
+        else if (cp < mn) newVal = mn;
+
+        result.data[idx + c] = newVal;
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── 19) Filtro Gaussiano ─────────────────────────────────────────────────────
+// Convolução com kernel Gaussiano de tamanho NxN e desvio padrão σ.
+// kernel(x,y) = exp(-(x²+y²) / (2σ²))  →  normalizado para somar 1.
+
+function buildGaussianKernel(size, sigma) {
+  const half = Math.floor(size / 2);
+  const kernel = [];
+  let sum = 0;
+
+  for (let y = -half; y <= half; y++) {
+    const row = [];
+    for (let x = -half; x <= half; x++) {
+      const val = Math.exp(-(x * x + y * y) / (2 * sigma * sigma));
+      row.push(val);
+      sum += val;
+    }
+    kernel.push(row);
+  }
+
+  // Normaliza
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) kernel[y][x] /= sum;
+
+  return kernel;
+}
+
+function filterGaussian() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width, height, data1 } = src;
+
+  const size = getMaskSize("maskSizeGaussian");
+  const sigma = parseFloat(document.getElementById("gaussianSigma").value);
+
+  if (isNaN(sigma) || sigma <= 0) {
+    alert("σ deve ser um número positivo.");
+    return;
+  }
+
+  const kernel = buildGaussianKernel(size, sigma);
+  const half = Math.floor(size / 2);
+  const result = ctx.createImageData(width, height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        let acc = 0;
+        for (let ky = 0; ky < size; ky++) {
+          for (let kx = 0; kx < size; kx++) {
+            const nx = Math.min(Math.max(x + kx - half, 0), width - 1);
+            const ny = Math.min(Math.max(y + ky - half, 0), height - 1);
+            acc += data1.data[(ny * width + nx) * 4 + c] * kernel[ky][kx];
+          }
+        }
+        result.data[idx + c] = Math.round(Math.min(255, Math.max(0, acc)));
+      }
+      result.data[idx + 3] = 255;
+    }
+  }
+  commitResult(result);
+}
+
+// ─── Exportar ────────────────────────────────────────────────────────────────
 function exportImage() {
   if (!currentImageData) {
     alert("Nada para exportar.");
