@@ -9,6 +9,8 @@
   --logic-hover: #6d28d9;
   --filter-color: #059669;
   --filter-hover: #047857;
+  --filter-high-color: #dc2626;
+  --filter-high-hover: #b91c1c;
   --bg-color: #0f172a;
   --card-bg: #1e293b;
   --text-color: #f8fafc;
@@ -64,18 +66,36 @@ body {
   align-items: flex-start;
 }
 
-.left-panel,
+.left-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-width: 0;
+}
+
 .right-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  position: sticky;
+  top: 2rem;
+  align-self: flex-start;
+  max-height: calc(100vh - 4rem);
 }
 
 .images-wrapper {
   display: flex;
   gap: 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-color);
+  padding: 0.5rem 0;
+  margin: -0.5rem 0;
 }
+
 
 .image-card,
 .result-card,
@@ -221,18 +241,6 @@ input[type="file"]::file-selector-button:hover {
   gap: 0.5rem;
 }
 
-/* Descrição dos filtros */
-.filter-desc {
-  margin: 0 0 1rem 0;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.filter-desc strong {
-  color: #a5f3fc;
-}
-
 .inline-inputs {
   display: flex;
   gap: 1.5rem;
@@ -293,6 +301,15 @@ input[type="file"]::file-selector-button:hover {
 .btn-secondary:hover {
   background-color: var(--secondary-hover);
 }
+.btn-reset {
+  background-color: #7f1d1d;
+  color: #fca5a5;
+  border: 1px solid #991b1b;
+}
+.btn-reset:hover {
+  background-color: #991b1b;
+  color: #fff;
+}
 .btn-action {
   background-color: var(--action-color);
   color: white;
@@ -319,35 +336,65 @@ input[type="file"]::file-selector-button:hover {
 .btn-filter:hover {
   background-color: var(--filter-hover);
 }
+.btn-filter-high {
+  background-color: var(--filter-high-color);
+  color: white;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  margin-top: 0.25rem;
+}
+.btn-filter-high:hover {
+  background-color: var(--filter-high-hover);
+}
+
+/* ── Descrição e título de seção dos filtros ── */
+.filter-desc {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.filter-desc strong {
+  color: #a5f3fc;
+}
+.filter-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--filter-color);
+  padding: 0.4rem 0.75rem;
+  border-left: 3px solid var(--filter-color);
+  background: rgba(5, 150, 105, 0.07);
+  border-radius: 0 0.25rem 0.25rem 0;
+  margin-bottom: 0.25rem;
+}
 
 /* ── Slider row (filtros) ── */
 .slider-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.6rem;
   background-color: rgba(0, 0, 0, 0.2);
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   border: 1px solid var(--border-color);
 }
-
 .slider-label {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-color);
   white-space: nowrap;
-  min-width: 60px;
+  min-width: 68px;
 }
-
 .slider-val {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: #a5f3fc;
-  min-width: 32px;
+  min-width: 36px;
   text-align: right;
 }
-
 input[type="range"] {
   flex: 1;
   accent-color: var(--filter-color);

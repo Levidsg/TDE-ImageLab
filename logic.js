@@ -466,301 +466,237 @@ function transformImage(mode) {
   commitResult(result);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ─── FILTROS ESPACIAIS (Tarefa 15–19) ────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Utilitários de vizinhança ─────────────────────────────────────────────────
+// ─── Auxiliares de Filtro ────────────────────────────────────────────────────
 
-/**
- * Retorna os valores de cinza (ou canal) de uma janela MxN centrada em (cx, cy).
- * Usa padding por replicação de borda (clamp).
- */
-function getNeighborhood(data, width, height, cx, cy, maskW, maskH, channel) {
-  const half_w = Math.floor(maskW / 2);
-  const half_h = Math.floor(maskH / 2);
-  const values = [];
-
-  for (let dy = -half_h; dy <= half_h; dy++) {
-    for (let dx = -half_w; dx <= half_w; dx++) {
-      const nx = Math.min(Math.max(cx + dx, 0), width - 1);
-      const ny = Math.min(Math.max(cy + dy, 0), height - 1);
-      values.push(data[(ny * width + nx) * 4 + channel]);
-    }
+function _toGray(imageData) {
+  const { data, width, height } = imageData;
+  const gray = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
   }
-  return values;
+  return gray;
 }
 
-/** Lê tamanho da máscara do slider: posição 1→3, 2→5, 3→7 */
-function getMaskSize(sliderId) {
-  const pos = parseInt(document.getElementById(sliderId).value);
-  return pos * 2 + 1; // 1→3, 2→5, 3→7
+function _getWindow(gray, w, h, cx, cy, size) {
+  const half = Math.floor(size / 2);
+  const win = [];
+  for (let dy = -half; dy <= half; dy++)
+    for (let dx = -half; dx <= half; dx++)
+      win.push(gray[Math.max(0,Math.min(h-1,cy+dy))*w + Math.max(0,Math.min(w-1,cx+dx))]);
+  return win;
 }
 
-/** Atualiza o label do slider de máscara */
-function updateMaskLabel(sliderId, labelId) {
-  const size = getMaskSize(sliderId);
-  document.getElementById(labelId).textContent = size + "×" + size;
+function _convolve(gray, w, h, kernel, ksize) {
+  const result = new Float32Array(w * h);
+  const half = Math.floor(ksize / 2);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let ky = 0; ky < ksize; ky++)
+        for (let kx = 0; kx < ksize; kx++)
+          sum += gray[Math.max(0,Math.min(h-1,y+ky-half))*w + Math.max(0,Math.min(w-1,x+kx-half))] * kernel[ky*ksize+kx];
+      result[y*w+x] = sum;
+    }
+  return result;
 }
 
-/** Atualiza range e label do slider k do filtro ORDEM */
-function updateOrderKRange() {
-  const m = getMaskSize("maskSizeOrder");
-  const total = m * m;
-  const input = document.getElementById("orderK");
-  input.max = total;
-  if (parseInt(input.value) > total) input.value = Math.ceil(total / 2);
-  updateOrderKLabel();
+function _write(result, imageData, normalize) {
+  const pixels = imageData.data;
+  const n = imageData.width * imageData.height;
+  let min = Infinity, max = -Infinity;
+  if (normalize)
+    for (let i = 0; i < n; i++) { if (result[i] < min) min = result[i]; if (result[i] > max) max = result[i]; }
+  const range = max - min || 1;
+  for (let i = 0; i < n; i++) {
+    const v = normalize ? ((result[i]-min)/range)*255 : Math.max(0,Math.min(255,result[i]));
+    pixels[i*4] = pixels[i*4+1] = pixels[i*4+2] = v;
+    pixels[i*4+3] = 255;
+  }
 }
 
-function updateOrderKLabel() {
-  const v = document.getElementById("orderK").value;
-  document.getElementById("orderKVal").textContent = v;
-  document.getElementById("orderKLabel").textContent = "k = " + v;
+function _gaussKernel(size, sigma) {
+  const half = Math.floor(size / 2);
+  const k = [];
+  let sum = 0;
+  for (let y = -half; y <= half; y++)
+    for (let x = -half; x <= half; x++) {
+      const v = Math.exp(-(x*x+y*y)/(2*sigma*sigma));
+      k.push(v); sum += v;
+    }
+  return k.map(v => v / sum);
 }
 
-// ─── 15a) Filtro MAX ──────────────────────────────────────────────────────────
-// Substitui o pixel pelo valor máximo da vizinhança → realça regiões claras.
+// ─── Filtros Passa-Baixa ─────────────────────────────────────────────────────
+
 function filterMax() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-  const m = getMaskSize("maskSizeMax");
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
-        result.data[idx + c] = Math.max(...nb);
-      }
-      result.data[idx + 3] = 255;
-    }
-  }
-  commitResult(result);
+  const { width: w, height: h, data1 } = src;
+  const size = parseInt(document.getElementById('f-size-max').value);
+  const gray = _toGray(data1);
+  const result = new Float32Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      result[y*w+x] = Math.max(..._getWindow(gray,w,h,x,y,size));
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
-// ─── 15b) Filtro MIN ──────────────────────────────────────────────────────────
-// Substitui o pixel pelo valor mínimo da vizinhança → realça regiões escuras.
 function filterMin() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-  const m = getMaskSize("maskSizeMin");
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
-        result.data[idx + c] = Math.min(...nb);
-      }
-      result.data[idx + 3] = 255;
-    }
-  }
-  commitResult(result);
+  const { width: w, height: h, data1 } = src;
+  const size = parseInt(document.getElementById('f-size-min').value);
+  const gray = _toGray(data1);
+  const result = new Float32Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      result[y*w+x] = Math.min(..._getWindow(gray,w,h,x,y,size));
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
-// ─── 15c) Filtro MEAN (Média) ─────────────────────────────────────────────────
-// Substitui o pixel pela média aritmética da vizinhança → suavização linear.
 function filterMean() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-  const m = getMaskSize("maskSizeMean");
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
-        const avg = nb.reduce((a, b) => a + b, 0) / nb.length;
-        result.data[idx + c] = Math.round(avg);
-      }
-      result.data[idx + 3] = 255;
-    }
-  }
-  commitResult(result);
+  const { width: w, height: h, data1 } = src;
+  const size = parseInt(document.getElementById('f-size-mean').value);
+  const gray = _toGray(data1);
+  const n = size * size;
+  const result = _convolve(gray, w, h, new Array(n).fill(1/n), size);
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
-// ─── 16) Filtro MEDIANA ───────────────────────────────────────────────────────
-// Remove ruído sal-e-pimenta: substitui pixel pela mediana da vizinhança.
-// Preserva bordas melhor que a média.
 function filterMedian() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-  const m = getMaskSize("maskSizeMedian");
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const nb = getNeighborhood(
-          data1.data,
-          width,
-          height,
-          x,
-          y,
-          m,
-          m,
-          c,
-        ).sort((a, b) => a - b);
-        const mid = Math.floor(nb.length / 2);
-        result.data[idx + c] = nb[mid];
-      }
-      result.data[idx + 3] = 255;
+  const { width: w, height: h, data1 } = src;
+  const size = parseInt(document.getElementById('f-size-median').value);
+  const gray = _toGray(data1);
+  const result = new Float32Array(w * h);
+  const mi = Math.floor((size*size)/2);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const win = _getWindow(gray,w,h,x,y,size).sort((a,b)=>a-b);
+      result[y*w+x] = win[mi];
     }
-  }
-  commitResult(result);
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
-// ─── 17) Filtro ORDEM ─────────────────────────────────────────────────────────
-// Ordena os pixels da vizinhança e seleciona o k-ésimo valor.
-// k=1 → mínimo, k=N²/2 → mediana, k=N² → máximo.
 function filterOrder() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-  const m = getMaskSize("maskSizeOrder");
-  const k = parseInt(document.getElementById("orderK").value);
-  const total = m * m;
-
-  if (isNaN(k) || k < 1 || k > total) {
-    alert(`k deve estar entre 1 e ${total} para uma máscara ${m}×${m}.`);
-    return;
-  }
-
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const nb = getNeighborhood(
-          data1.data,
-          width,
-          height,
-          x,
-          y,
-          m,
-          m,
-          c,
-        ).sort((a, b) => a - b);
-        result.data[idx + c] = nb[k - 1]; // k é 1-indexado
-      }
-      result.data[idx + 3] = 255;
+  const { width: w, height: h, data1 } = src;
+  const size = parseInt(document.getElementById('f-size-order').value);
+  const pct  = parseInt(document.getElementById('f-pct-order').value);
+  const gray = _toGray(data1);
+  const result = new Float32Array(w * h);
+  const k = Math.round((pct/100)*(size*size-1));
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const win = _getWindow(gray,w,h,x,y,size).sort((a,b)=>a-b);
+      result[y*w+x] = win[k];
     }
-  }
-  commitResult(result);
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
-// ─── 18) Suavização Conservativa ─────────────────────────────────────────────
-// Preserva o pixel central se ele já estiver entre min e max da vizinhança.
-// Se cp > max → cp = max; se cp < min → cp = min.
-// Implementado conforme o algoritmo do slide (imagem 1 da tarefa).
 function filterConservative() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-  const m = getMaskSize("maskSizeConservative");
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        // Vizinhança exclui o pixel central (apenas os vizinhos ao redor)
-        const nb = getNeighborhood(data1.data, width, height, x, y, m, m, c);
-        const cp = data1.data[idx + c];
-        const half = Math.floor(m / 2);
-        // Remove o centro da lista para calcular min/max apenas dos vizinhos
-        const centerIdx = half * m + half;
-        const neighbors = nb.filter((_, i) => i !== centerIdx);
-
-        const mn = Math.min(...neighbors);
-        const mx = Math.max(...neighbors);
-
-        let newVal = cp;
-        if (cp > mx) newVal = mx;
-        else if (cp < mn) newVal = mn;
-
-        result.data[idx + c] = newVal;
-      }
-      result.data[idx + 3] = 255;
+  const { width: w, height: h, data1 } = src;
+  const size = parseInt(document.getElementById('f-size-cs').value);
+  const gray = _toGray(data1);
+  const result = new Float32Array(w * h);
+  const half = Math.floor(size/2);
+  const ci = half*size+half;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const win = _getWindow(gray,w,h,x,y,size);
+      const c = win[ci];
+      const nb = win.filter((_,i)=>i!==ci);
+      const mn = Math.min(...nb), mx = Math.max(...nb);
+      result[y*w+x] = c < mn ? mn : c > mx ? mx : c;
     }
-  }
-  commitResult(result);
-}
-
-// ─── 19) Filtro Gaussiano ─────────────────────────────────────────────────────
-// Convolução com kernel Gaussiano de tamanho NxN e desvio padrão σ.
-// kernel(x,y) = exp(-(x²+y²) / (2σ²))  →  normalizado para somar 1.
-
-function buildGaussianKernel(size, sigma) {
-  const half = Math.floor(size / 2);
-  const kernel = [];
-  let sum = 0;
-
-  for (let y = -half; y <= half; y++) {
-    const row = [];
-    for (let x = -half; x <= half; x++) {
-      const val = Math.exp(-(x * x + y * y) / (2 * sigma * sigma));
-      row.push(val);
-      sum += val;
-    }
-    kernel.push(row);
-  }
-
-  // Normaliza
-  for (let y = 0; y < size; y++)
-    for (let x = 0; x < size; x++) kernel[y][x] /= sum;
-
-  return kernel;
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
 function filterGaussian() {
   const src = getSourceData();
   if (!src) return;
-  const { width, height, data1 } = src;
-
-  const size = getMaskSize("maskSizeGaussian");
-  const sigma = parseFloat(document.getElementById("gaussianSigma").value);
-
-  if (isNaN(sigma) || sigma <= 0) {
-    alert("σ deve ser um número positivo.");
-    return;
-  }
-
-  const kernel = buildGaussianKernel(size, sigma);
-  const half = Math.floor(size / 2);
-  const result = ctx.createImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        let acc = 0;
-        for (let ky = 0; ky < size; ky++) {
-          for (let kx = 0; kx < size; kx++) {
-            const nx = Math.min(Math.max(x + kx - half, 0), width - 1);
-            const ny = Math.min(Math.max(y + ky - half, 0), height - 1);
-            acc += data1.data[(ny * width + nx) * 4 + c] * kernel[ky][kx];
-          }
-        }
-        result.data[idx + c] = Math.round(Math.min(255, Math.max(0, acc)));
-      }
-      result.data[idx + 3] = 255;
-    }
-  }
-  commitResult(result);
+  const { width: w, height: h, data1 } = src;
+  const size  = parseInt(document.getElementById('f-size-gauss').value);
+  const sigma = parseFloat(document.getElementById('f-sigma-gauss').value);
+  const gray = _toGray(data1);
+  const result = _convolve(gray, w, h, _gaussKernel(size, sigma), size);
+  _write(result, data1, false);
+  commitResult(data1);
 }
 
+// ─── Filtros Passa-Alta ──────────────────────────────────────────────────────
+
+function filterPrewitt() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width: w, height: h, data1 } = src;
+  const gray = _toGray(data1);
+  const Gx = _convolve(gray,w,h,[-1,0,1,-1,0,1,-1,0,1],3);
+  const Gy = _convolve(gray,w,h,[-1,-1,-1,0,0,0,1,1,1],3);
+  const mag = new Float32Array(w*h);
+  for (let i = 0; i < w*h; i++) mag[i] = Math.sqrt(Gx[i]*Gx[i]+Gy[i]*Gy[i]);
+  _write(mag, data1, true);
+  commitResult(data1);
+}
+
+function filterSobel() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width: w, height: h, data1 } = src;
+  const gray = _toGray(data1);
+  const Gx = _convolve(gray,w,h,[-1,0,1,-2,0,2,-1,0,1],3);
+  const Gy = _convolve(gray,w,h,[-1,-2,-1,0,0,0,1,2,1],3);
+  const mag = new Float32Array(w*h);
+  for (let i = 0; i < w*h; i++) mag[i] = Math.sqrt(Gx[i]*Gx[i]+Gy[i]*Gy[i]);
+  _write(mag, data1, true);
+  commitResult(data1);
+}
+
+function filterLaplacian() {
+  const src = getSourceData();
+  if (!src) return;
+  const { width: w, height: h, data1 } = src;
+  const conn  = parseInt(document.getElementById('f-conn-lap').value);
+  const sigma = parseFloat(document.getElementById('f-sigma-lap').value);
+  let gray = _toGray(data1);
+  if (sigma > 0) gray = _convolve(gray, w, h, _gaussKernel(5, sigma), 5);
+  const kernel = conn === 4 ? [0,1,0,1,-4,1,0,1,0] : [1,1,1,1,-8,1,1,1,1];
+  const result = _convolve(gray, w, h, kernel, 3);
+  _write(result, data1, true);
+  commitResult(data1);
+}
+
+// ─── Sync de labels dos sliders ──────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.f-slider').forEach(slider => {
+    const out = document.getElementById(slider.dataset.out);
+    if (!out) return;
+    const fmt = slider.dataset.fmt || 'size';
+    const update = () => {
+      const v = slider.value;
+      out.textContent = fmt === 'pct' ? v + '%' : fmt === 'sigma' ? parseFloat(v).toFixed(1) : v + '×' + v;
+    };
+    slider.addEventListener('input', update);
+    update();
+  });
+});
+
 // ─── Exportar ────────────────────────────────────────────────────────────────
+
 function exportImage() {
   if (!currentImageData) {
     alert("Nada para exportar.");
@@ -770,4 +706,12 @@ function exportImage() {
   link.download = "imagem.png";
   link.href = canvas.toDataURL();
   link.click();
+}
+
+// ─── Resetar Preview ─────────────────────────────────────────────────────────
+function resetPreview() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.width = 0;
+  canvas.height = 0;
+  currentImageData = null;
 }
