@@ -466,231 +466,139 @@ function transformImage(mode) {
   commitResult(result);
 }
 
+// ─── Morfologia ──────────────────────────────────────────────────────────────
 
-// ─── Auxiliares de Filtro ────────────────────────────────────────────────────
-
-function _toGray(imageData) {
+function _morphToBinary(imageData) {
   const { data, width, height } = imageData;
-  const gray = new Float32Array(width * height);
-  for (let i = 0; i < width * height; i++) {
-    gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
-  }
-  return gray;
+  const bin = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++)
+    bin[i] =
+      0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2] >
+      127
+        ? 1
+        : 0;
+  return bin;
 }
 
-function _getWindow(gray, w, h, cx, cy, size) {
-  const half = Math.floor(size / 2);
-  const win = [];
-  for (let dy = -half; dy <= half; dy++)
-    for (let dx = -half; dx <= half; dx++)
-      win.push(gray[Math.max(0,Math.min(h-1,cy+dy))*w + Math.max(0,Math.min(w-1,cx+dx))]);
-  return win;
-}
-
-function _convolve(gray, w, h, kernel, ksize) {
-  const result = new Float32Array(w * h);
-  const half = Math.floor(ksize / 2);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      let sum = 0;
-      for (let ky = 0; ky < ksize; ky++)
-        for (let kx = 0; kx < ksize; kx++)
-          sum += gray[Math.max(0,Math.min(h-1,y+ky-half))*w + Math.max(0,Math.min(w-1,x+kx-half))] * kernel[ky*ksize+kx];
-      result[y*w+x] = sum;
-    }
-  return result;
-}
-
-function _write(result, imageData, normalize) {
+function _morphWrite(bin, imageData) {
   const pixels = imageData.data;
-  const n = imageData.width * imageData.height;
-  let min = Infinity, max = -Infinity;
-  if (normalize)
-    for (let i = 0; i < n; i++) { if (result[i] < min) min = result[i]; if (result[i] > max) max = result[i]; }
-  const range = max - min || 1;
-  for (let i = 0; i < n; i++) {
-    const v = normalize ? ((result[i]-min)/range)*255 : Math.max(0,Math.min(255,result[i]));
-    pixels[i*4] = pixels[i*4+1] = pixels[i*4+2] = v;
-    pixels[i*4+3] = 255;
+  for (let i = 0; i < bin.length; i++) {
+    const v = bin[i] ? 255 : 0;
+    pixels[i * 4] = pixels[i * 4 + 1] = pixels[i * 4 + 2] = v;
+    pixels[i * 4 + 3] = 255;
   }
 }
 
-function _gaussKernel(size, sigma) {
+function _getStructEl() {
+  const size = parseInt(document.getElementById("m-size").value);
+  return size;
+}
+
+function _dilate(bin, w, h, size) {
   const half = Math.floor(size / 2);
-  const k = [];
-  let sum = 0;
-  for (let y = -half; y <= half; y++)
-    for (let x = -half; x <= half; x++) {
-      const v = Math.exp(-(x*x+y*y)/(2*sigma*sigma));
-      k.push(v); sum += v;
-    }
-  return k.map(v => v / sum);
-}
-
-// ─── Filtros Passa-Baixa ─────────────────────────────────────────────────────
-
-function filterMax() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = parseInt(document.getElementById('f-size-max').value);
-  const gray = _toGray(data1);
-  const result = new Float32Array(w * h);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      result[y*w+x] = Math.max(..._getWindow(gray,w,h,x,y,size));
-  _write(result, data1, false);
-  commitResult(data1);
-}
-
-function filterMin() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = parseInt(document.getElementById('f-size-min').value);
-  const gray = _toGray(data1);
-  const result = new Float32Array(w * h);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      result[y*w+x] = Math.min(..._getWindow(gray,w,h,x,y,size));
-  _write(result, data1, false);
-  commitResult(data1);
-}
-
-function filterMean() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = parseInt(document.getElementById('f-size-mean').value);
-  const gray = _toGray(data1);
-  const n = size * size;
-  const result = _convolve(gray, w, h, new Array(n).fill(1/n), size);
-  _write(result, data1, false);
-  commitResult(data1);
-}
-
-function filterMedian() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = parseInt(document.getElementById('f-size-median').value);
-  const gray = _toGray(data1);
-  const result = new Float32Array(w * h);
-  const mi = Math.floor((size*size)/2);
+  const out = new Uint8Array(w * h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
-      const win = _getWindow(gray,w,h,x,y,size).sort((a,b)=>a-b);
-      result[y*w+x] = win[mi];
+      let hit = 0;
+      outer: for (let dy = -half; dy <= half && !hit; dy++)
+        for (let dx = -half; dx <= half && !hit; dx++) {
+          const nx = Math.max(0, Math.min(w - 1, x + dx));
+          const ny = Math.max(0, Math.min(h - 1, y + dy));
+          if (bin[ny * w + nx]) hit = 1;
+        }
+      out[y * w + x] = hit;
     }
-  _write(result, data1, false);
-  commitResult(data1);
+  return out;
 }
 
-function filterOrder() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = parseInt(document.getElementById('f-size-order').value);
-  const pct  = parseInt(document.getElementById('f-pct-order').value);
-  const gray = _toGray(data1);
-  const result = new Float32Array(w * h);
-  const k = Math.round((pct/100)*(size*size-1));
+function _erode(bin, w, h, size) {
+  const half = Math.floor(size / 2);
+  const out = new Uint8Array(w * h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
-      const win = _getWindow(gray,w,h,x,y,size).sort((a,b)=>a-b);
-      result[y*w+x] = win[k];
+      let all = 1;
+      outer: for (let dy = -half; dy <= half && all; dy++)
+        for (let dx = -half; dx <= half && all; dx++) {
+          const nx = Math.max(0, Math.min(w - 1, x + dx));
+          const ny = Math.max(0, Math.min(h - 1, y + dy));
+          if (!bin[ny * w + nx]) all = 0;
+        }
+      out[y * w + x] = all;
     }
-  _write(result, data1, false);
-  commitResult(data1);
+  return out;
 }
 
-function filterConservative() {
+function morphDilate() {
   const src = getSourceData();
   if (!src) return;
   const { width: w, height: h, data1 } = src;
-  const size = parseInt(document.getElementById('f-size-cs').value);
-  const gray = _toGray(data1);
-  const result = new Float32Array(w * h);
-  const half = Math.floor(size/2);
-  const ci = half*size+half;
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const win = _getWindow(gray,w,h,x,y,size);
-      const c = win[ci];
-      const nb = win.filter((_,i)=>i!==ci);
-      const mn = Math.min(...nb), mx = Math.max(...nb);
-      result[y*w+x] = c < mn ? mn : c > mx ? mx : c;
-    }
-  _write(result, data1, false);
+  const size = _getStructEl();
+  const bin = _morphToBinary(data1);
+  _morphWrite(_dilate(bin, w, h, size), data1);
   commitResult(data1);
 }
 
-function filterGaussian() {
+function morphErode() {
   const src = getSourceData();
   if (!src) return;
   const { width: w, height: h, data1 } = src;
-  const size  = parseInt(document.getElementById('f-size-gauss').value);
-  const sigma = parseFloat(document.getElementById('f-sigma-gauss').value);
-  const gray = _toGray(data1);
-  const result = _convolve(gray, w, h, _gaussKernel(size, sigma), size);
-  _write(result, data1, false);
+  const size = _getStructEl();
+  const bin = _morphToBinary(data1);
+  _morphWrite(_erode(bin, w, h, size), data1);
   commitResult(data1);
 }
 
-// ─── Filtros Passa-Alta ──────────────────────────────────────────────────────
-
-function filterPrewitt() {
+function morphOpen() {
   const src = getSourceData();
   if (!src) return;
   const { width: w, height: h, data1 } = src;
-  const gray = _toGray(data1);
-  const Gx = _convolve(gray,w,h,[-1,0,1,-1,0,1,-1,0,1],3);
-  const Gy = _convolve(gray,w,h,[-1,-1,-1,0,0,0,1,1,1],3);
-  const mag = new Float32Array(w*h);
-  for (let i = 0; i < w*h; i++) mag[i] = Math.sqrt(Gx[i]*Gx[i]+Gy[i]*Gy[i]);
-  _write(mag, data1, true);
+  const size = _getStructEl();
+  const bin = _morphToBinary(data1);
+  _morphWrite(_dilate(_erode(bin, w, h, size), w, h, size), data1);
   commitResult(data1);
 }
 
-function filterSobel() {
+function morphClose() {
   const src = getSourceData();
   if (!src) return;
   const { width: w, height: h, data1 } = src;
-  const gray = _toGray(data1);
-  const Gx = _convolve(gray,w,h,[-1,0,1,-2,0,2,-1,0,1],3);
-  const Gy = _convolve(gray,w,h,[-1,-2,-1,0,0,0,1,2,1],3);
-  const mag = new Float32Array(w*h);
-  for (let i = 0; i < w*h; i++) mag[i] = Math.sqrt(Gx[i]*Gx[i]+Gy[i]*Gy[i]);
-  _write(mag, data1, true);
+  const size = _getStructEl();
+  const bin = _morphToBinary(data1);
+  _morphWrite(_erode(_dilate(bin, w, h, size), w, h, size), data1);
   commitResult(data1);
 }
 
-function filterLaplacian() {
+function morphContour() {
   const src = getSourceData();
   if (!src) return;
   const { width: w, height: h, data1 } = src;
-  const conn  = parseInt(document.getElementById('f-conn-lap').value);
-  const sigma = parseFloat(document.getElementById('f-sigma-lap').value);
-  let gray = _toGray(data1);
-  if (sigma > 0) gray = _convolve(gray, w, h, _gaussKernel(5, sigma), 5);
-  const kernel = conn === 4 ? [0,1,0,1,-4,1,0,1,0] : [1,1,1,1,-8,1,1,1,1];
-  const result = _convolve(gray, w, h, kernel, 3);
-  _write(result, data1, true);
+  const size = _getStructEl();
+  const bin = _morphToBinary(data1);
+  const eroded = _erode(bin, w, h, size);
+  const contour = new Uint8Array(w * h);
+  for (let i = 0; i < bin.length; i++)
+    contour[i] = bin[i] && !eroded[i] ? 1 : 0;
+  _morphWrite(contour, data1);
   commitResult(data1);
 }
 
 // ─── Sync de labels dos sliders ──────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.f-slider').forEach(slider => {
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".f-slider").forEach((slider) => {
     const out = document.getElementById(slider.dataset.out);
     if (!out) return;
-    const fmt = slider.dataset.fmt || 'size';
+    const fmt = slider.dataset.fmt || "size";
     const update = () => {
       const v = slider.value;
-      out.textContent = fmt === 'pct' ? v + '%' : fmt === 'sigma' ? parseFloat(v).toFixed(1) : v + '×' + v;
+      out.textContent =
+        fmt === "pct"
+          ? v + "%"
+          : fmt === "sigma"
+            ? parseFloat(v).toFixed(1)
+            : v + "×" + v;
     };
-    slider.addEventListener('input', update);
+    slider.addEventListener("input", update);
     update();
   });
 });

@@ -58,12 +58,10 @@
             <button class="tab-btn" onclick="switchTab('transformacoes')">
               Transformações
             </button>
-            <button class="tab-btn" onclick="switchTab('filtros')">
-              Filtros
+            <button class="tab-btn" onclick="switchTab('morfologico')">
+              Morfológico
             </button>
-
           </div>
-
 
           <!-- Aba: Entre Imagens -->
           <div class="tab-panel active" id="tab-imagens">
@@ -231,148 +229,54 @@
             </div>
           </div>
 
-          <!-- Aba: Filtros ──────────────────────────────────────────────────── -->
-          <div class="tab-panel" id="tab-filtros">
-
-            <!-- ── PASSA-BAIXA ───────────────────────────────────────────────── -->
-            <div class="filter-section-title">Filtros Passa-Baixa</div>
-
-            <!-- MAX -->
+          <!-- Aba: Morfológico ────────────────────────────────────────────────── -->
+          <div class="tab-panel" id="tab-morfologico">
             <div class="control-group">
-              <h3>Filtro MAX</h3>
-              <p class="filter-desc">Substitui o pixel pelo <strong>maior</strong> valor da vizinhança. Realça regiões claras.</p>
+              <h3>Operações Morfológicas</h3>
+              <p class="filter-desc">
+                Operações não-lineares baseadas na forma dos objetos. Utilizam
+                um elemento estruturante quadrado para processar imagens
+                binárias.
+              </p>
+
               <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-max" class="f-slider" data-out="lbl-size-max" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-max">3×3</span>
+                <span class="slider-label">Elem. Estrut.</span>
+                <input
+                  type="range"
+                  id="m-size"
+                  class="f-slider"
+                  data-out="lbl-m-size"
+                  min="3"
+                  max="11"
+                  step="2"
+                  value="3"
+                />
+                <span class="slider-val" id="lbl-m-size">3×3</span>
               </div>
-              <button class="btn btn-filter" onclick="filterMax()">Aplicar MAX</button>
+
+              <div class="buttons grid-buttons">
+                <button class="btn btn-morph" onclick="morphDilate()">
+                  Dilatação
+                </button>
+                <button class="btn btn-morph" onclick="morphErode()">
+                  Erosão
+                </button>
+                <button class="btn btn-morph" onclick="morphOpen()">
+                  Abertura
+                </button>
+                <button class="btn btn-morph" onclick="morphClose()">
+                  Fechamento
+                </button>
+              </div>
+              <div style="margin-top: 0.75rem">
+                <button class="btn btn-morph-contour" onclick="morphContour()">
+                  Obter Contorno
+                </button>
+              </div>
             </div>
-
-            <!-- MIN -->
-            <div class="control-group">
-              <h3>Filtro MIN</h3>
-              <p class="filter-desc">Substitui o pixel pelo <strong>menor</strong> valor da vizinhança. Realça regiões escuras.</p>
-              <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-min" class="f-slider" data-out="lbl-size-min" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-min">3×3</span>
-              </div>
-              <button class="btn btn-filter" onclick="filterMin()">Aplicar MIN</button>
-            </div>
-
-            <!-- MEAN -->
-            <div class="control-group">
-              <h3>Filtro MEAN</h3>
-              <p class="filter-desc">Substitui o pixel pela <strong>média aritmética</strong> da vizinhança. Suavização linear.</p>
-              <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-mean" class="f-slider" data-out="lbl-size-mean" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-mean">3×3</span>
-              </div>
-              <button class="btn btn-filter" onclick="filterMean()">Aplicar MEAN</button>
-            </div>
-
-            <!-- MEDIANA -->
-            <div class="control-group">
-              <h3>Filtro MEDIANA</h3>
-              <p class="filter-desc">Usa o valor central da vizinhança ordenada. Remove <strong>ruído sal-e-pimenta</strong>.</p>
-              <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-median" class="f-slider" data-out="lbl-size-median" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-median">3×3</span>
-              </div>
-              <button class="btn btn-filter" onclick="filterMedian()">Aplicar MEDIANA</button>
-            </div>
-
-            <!-- ORDEM -->
-            <div class="control-group">
-              <h3>Filtro ORDEM</h3>
-              <p class="filter-desc">Seleciona o <strong>k-ésimo percentil</strong> da vizinhança ordenada (0% → mín, 50% → mediana, 100% → máx).</p>
-              <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-order" class="f-slider" data-out="lbl-size-order" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-order">3×3</span>
-              </div>
-              <div class="slider-row">
-                <span class="slider-label">Percentil</span>
-                <input type="range" id="f-pct-order" class="f-slider" data-out="lbl-pct-order" data-fmt="pct" min="0" max="100" step="1" value="50" />
-                <span class="slider-val" id="lbl-pct-order">50%</span>
-              </div>
-              <button class="btn btn-filter" onclick="filterOrder()">Aplicar ORDEM</button>
-            </div>
-
-            <!-- CONSERVATIVO -->
-            <div class="control-group">
-              <h3>Suavização Conservativa</h3>
-              <p class="filter-desc">Preserva o pixel se entre min/max dos vizinhos. Caso contrário <strong>clipa</strong> ao limite.</p>
-              <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-cs" class="f-slider" data-out="lbl-size-cs" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-cs">3×3</span>
-              </div>
-              <button class="btn btn-filter" onclick="filterConservative()">Aplicar Conservativo</button>
-            </div>
-
-            <!-- GAUSSIANO -->
-            <div class="control-group">
-              <h3>Filtro Gaussiano</h3>
-              <p class="filter-desc">Convolução com kernel Gaussiano. Suaviza preservando bordas melhor que a média simples.</p>
-              <div class="slider-row">
-                <span class="slider-label">Tamanho</span>
-                <input type="range" id="f-size-gauss" class="f-slider" data-out="lbl-size-gauss" min="3" max="11" step="2" value="3" />
-                <span class="slider-val" id="lbl-size-gauss">3×3</span>
-              </div>
-              <div class="slider-row">
-                <span class="slider-label">σ (sigma)</span>
-                <input type="range" id="f-sigma-gauss" class="f-slider" data-out="lbl-sigma-gauss" data-fmt="sigma" min="0.1" max="5" step="0.1" value="1.0" />
-                <span class="slider-val" id="lbl-sigma-gauss">1.0</span>
-              </div>
-              <button class="btn btn-filter" onclick="filterGaussian()">Aplicar Gaussiano</button>
-            </div>
-
-            <!-- ── PASSA-ALTA ─────────────────────────────────────────────────── -->
-            <div class="filter-section-title">Filtros Passa-Alta</div>
-
-            <!-- PREWITT -->
-            <div class="control-group">
-              <h3>Prewitt</h3>
-              <p class="filter-desc">Detecção de bordas de <strong>primeira ordem</strong> por gradiente direcional (Gx e Gy).</p>
-              <button class="btn btn-filter-high" onclick="filterPrewitt()">Aplicar Prewitt</button>
-            </div>
-
-            <!-- SOBEL -->
-            <div class="control-group">
-              <h3>Sobel</h3>
-              <p class="filter-desc">Detecção de bordas com pesos maiores ao centro — <strong>mais robusto</strong> que Prewitt.</p>
-              <button class="btn btn-filter-high" onclick="filterSobel()">Aplicar Sobel</button>
-            </div>
-
-            <!-- LAPLACIANO -->
-            <div class="control-group">
-              <h3>Laplaciano</h3>
-              <p class="filter-desc">Detecção de bordas de <strong>segunda ordem</strong>. Conectividade 4 ou 8 vizinhos.</p>
-              <div class="slider-row">
-                <span class="slider-label">Conectiv.</span>
-                <select id="f-conn-lap" class="select-input">
-                  <option value="4">4 vizinhos</option>
-                  <option value="8" selected>8 vizinhos</option>
-                </select>
-              </div>
-              <div class="slider-row">
-                <span class="slider-label">σ LoG</span>
-                <input type="range" id="f-sigma-lap" class="f-slider" data-out="lbl-sigma-lap" data-fmt="sigma" min="0" max="3" step="0.1" value="0" />
-                <span class="slider-val" id="lbl-sigma-lap">0.0</span>
-              </div>
-              <button class="btn btn-filter-high" onclick="filterLaplacian()">Aplicar Laplaciano</button>
-            </div>
-
           </div>
-          <!-- /tab-filtros -->
-
         </div>
       </div>
-
 
       <!-- Resultado -->
       <div class="right-panel">
@@ -382,7 +286,12 @@
             <canvas id="resultCanvas"></canvas>
           </div>
           <div
-            style="margin-top: 1.5rem; display: flex; justify-content: center; gap: 0.75rem;"
+            style="
+              margin-top: 1.5rem;
+              display: flex;
+              justify-content: center;
+              gap: 0.75rem;
+            "
           >
             <button class="btn btn-primary" onclick="exportImage()">
               Exportar Imagem Final
