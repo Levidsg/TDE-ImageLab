@@ -21,7 +21,6 @@
 
     <div class="main-container">
       <div class="left-panel">
-        <!-- Imagens -->
         <div class="images-wrapper">
           <div class="image-card">
             <h2>Imagem 1 (Base)</h2>
@@ -31,6 +30,7 @@
             <div class="preview-container">
               <img id="preview1" />
             </div>
+            <p id="info1" class="filter-desc">Nenhuma imagem carregada.</p>
           </div>
           <div class="image-card">
             <h2>Imagem 2 (Mesclagem)</h2>
@@ -40,10 +40,13 @@
             <div class="preview-container">
               <img id="preview2" />
             </div>
+            <p id="info2" class="filter-desc">Nenhuma imagem carregada.</p>
           </div>
         </div>
 
-        <!-- Abas -->
+        <canvas id="sourceCanvas1" style="display: none"></canvas>
+        <canvas id="sourceCanvas2" style="display: none"></canvas>
+
         <div class="tabs-card">
           <div class="tabs-nav">
             <button class="tab-btn active" onclick="switchTab('imagens')">
@@ -58,12 +61,14 @@
             <button class="tab-btn" onclick="switchTab('transformacoes')">
               Transformações
             </button>
+            <button class="tab-btn" onclick="switchTab('filtros')">
+              Filtros
+            </button>
             <button class="tab-btn" onclick="switchTab('morfologico')">
               Morfológico
             </button>
           </div>
 
-          <!-- Aba: Entre Imagens -->
           <div class="tab-panel active" id="tab-imagens">
             <div class="control-group">
               <h3>Operações Básicas</h3>
@@ -76,6 +81,12 @@
                 </button>
                 <button class="btn btn-secondary" onclick="differenceImages()">
                   Diferença
+                </button>
+                <button class="btn btn-secondary" onclick="multiplyImages()">
+                  Multiplicar
+                </button>
+                <button class="btn btn-secondary" onclick="divideImages()">
+                  Dividir
                 </button>
               </div>
             </div>
@@ -115,7 +126,6 @@
             </div>
           </div>
 
-          <!-- Aba: Lógicas -->
           <div class="tab-panel" id="tab-logicas">
             <div class="control-group">
               <h3>Operações Lógicas</h3>
@@ -136,7 +146,6 @@
             </div>
           </div>
 
-          <!-- Aba: Por Ponto -->
           <div class="tab-panel" id="tab-ponto">
             <div class="control-group">
               <h3>Limiarização</h3>
@@ -202,7 +211,6 @@
             </div>
           </div>
 
-          <!-- Aba: Transformações -->
           <div class="tab-panel" id="tab-transformacoes">
             <div class="control-group">
               <h3>Transformações Geométricas</h3>
@@ -229,7 +237,97 @@
             </div>
           </div>
 
-          <!-- Aba: Morfológico ────────────────────────────────────────────────── -->
+          <div class="tab-panel" id="tab-filtros">
+            <div class="control-group">
+              <h3>Filtros Passa-Baixa (Suavização)</h3>
+              <p class="filter-desc">
+                Aplicados em janela 3×3 sobre a imagem 1. O filtro ORDEM usa a
+                posição definida abaixo (1 a 9, onde 5 é a mediana).
+              </p>
+              <div class="constant-input-group">
+                <label for="orderValue">Ordem (1–9):</label>
+                <input
+                  type="number"
+                  id="orderValue"
+                  value="5"
+                  min="1"
+                  max="9"
+                  step="1"
+                />
+              </div>
+              <div class="buttons grid-buttons">
+                <button class="btn btn-action" onclick="spatialFilter('max')">
+                  MAX
+                </button>
+                <button class="btn btn-action" onclick="spatialFilter('min')">
+                  MIN
+                </button>
+                <button class="btn btn-action" onclick="spatialFilter('mean')">
+                  MEAN
+                </button>
+                <button
+                  class="btn btn-action"
+                  onclick="spatialFilter('median')"
+                >
+                  MEDIANA
+                </button>
+                <button class="btn btn-action" onclick="spatialFilter('order')">
+                  ORDEM
+                </button>
+                <button class="btn btn-action" onclick="conservativeFilter()">
+                  Suavização Conservativa
+                </button>
+              </div>
+            </div>
+            <div class="control-group">
+              <h3>Filtro Gaussiano</h3>
+              <div class="inline-inputs">
+                <label
+                  >Tamanho
+                  <input
+                    type="number"
+                    id="gaussianSize"
+                    value="5"
+                    step="2"
+                    min="3"
+                    max="7"
+                /></label>
+                <label
+                  >Sigma
+                  <input
+                    type="number"
+                    id="gaussianSigma"
+                    value="1"
+                    step="0.1"
+                    min="0.1"
+                /></label>
+              </div>
+              <button class="btn btn-action" onclick="gaussianFilter()">
+                Aplicar Gaussiano
+              </button>
+            </div>
+            <div class="control-group">
+              <h3>Filtros Passa-Alta (Bordas)</h3>
+              <div class="buttons grid-buttons">
+                <button
+                  class="btn btn-secondary"
+                  onclick="edgeFilter('prewitt')"
+                >
+                  Prewitt
+                </button>
+                <button class="btn btn-secondary" onclick="edgeFilter('sobel')">
+                  Sobel
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  onclick="edgeFilter('laplacian')"
+                >
+                  Laplaciano
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="tab-panel" id="tab-morfologico">
             <div class="control-group">
               <h3>Operações Morfológicas</h3>
@@ -278,7 +376,6 @@
         </div>
       </div>
 
-      <!-- Resultado -->
       <div class="right-panel">
         <div class="result-card">
           <h2>Resultado</h2>
@@ -291,6 +388,7 @@
               display: flex;
               justify-content: center;
               gap: 0.75rem;
+              flex-wrap: wrap;
             "
           >
             <button class="btn btn-primary" onclick="exportImage()">

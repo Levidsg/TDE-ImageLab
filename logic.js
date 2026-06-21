@@ -1,625 +1,1067 @@
-// ── Tabs ─────────────────────────────────────────────────────────────────────
-function switchTab(name) {
+// Processador Digital de Imagens
+// Interface adaptada para o HTML/CSS novo e cálculos mantidos em JavaScript puro.
+
+const sourceCanvas1 = document.getElementById("sourceCanvas1");
+const sourceCtx1 = sourceCanvas1.getContext("2d", { willReadFrequently: true });
+const sourceCanvas2 = document.getElementById("sourceCanvas2");
+const sourceCtx2 = sourceCanvas2.getContext("2d", { willReadFrequently: true });
+const resultCanvas = document.getElementById("resultCanvas");
+const resultCtx = resultCanvas.getContext("2d", { willReadFrequently: true });
+const histogramCanvas = document.getElementById("histogramCanvas");
+const histogramCtx = histogramCanvas ? histogramCanvas.getContext("2d") : null;
+
+let imgDataA = null;
+let imgDataB = null;
+let imgDataResult = null;
+
+// Matrizes solicitadas no trabalho: matriz[y][x] = { r, g, b, a }
+let matrizA = null;
+let matrizB = null;
+let matrizResultado = null;
+
+function clamp(value) {
+  if (!Number.isFinite(value)) return 0;
+  if (value > 255) return 255;
+  if (value < 0) return 0;
+  return Math.round(value);
+}
+
+function getIndex(x, y, width) {
+  return (y * width + x) * 4;
+}
+
+function getClampedIndex(x, y, width, height) {
+  const cx = Math.min(Math.max(x, 0), width - 1);
+  const cy = Math.min(Math.max(y, 0), height - 1);
+  return getIndex(cx, cy, width);
+}
+
+function luminance(r, g, b) {
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function imageDataToMatrix(imageData) {
+  const matrix = [];
+  const { width, height, data } = imageData;
+
+  for (let y = 0; y < height; y++) {
+    const row = [];
+    for (let x = 0; x < width; x++) {
+      const i = getIndex(x, y, width);
+      row.push({ r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] });
+    }
+    matrix.push(row);
+  }
+
+  return matrix;
+}
+
+function getNumericValue(id, fallback) {
+  const element = document.getElementById(id);
+  if (!element) return fallback;
+  const value = parseFloat(element.value);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function getIntValue(id, fallback) {
+  const element = document.getElementById(id);
+  if (!element) return fallback;
+  const value = parseInt(element.value, 10);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function setInfo(id, text) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = text;
+}
+
+function ensureImageA() {
+  if (!imgDataA) {
+    alert("Carregue a Imagem 1 primeiro.");
+    return false;
+  }
+  return true;
+}
+
+function ensureImageB() {
+  if (!imgDataB) {
+    alert("Esta operação precisa da Imagem 2 carregada.");
+    return false;
+  }
+  return true;
+}
+
+function loadImageFromInput(fileInput, preview, canvas, ctx, isA) {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (event) {
+    const img = new Image();
+
+    img.onload = function () {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      if (isA) {
+        imgDataA = imageData;
+        matrizA = imageDataToMatrix(imgDataA);
+        setInfo("info1", `${file.name} - ${img.width} × ${img.height} pixels`);
+        resetPreview(false);
+      } else {
+        imgDataB = imageData;
+        matrizB = imageDataToMatrix(imgDataB);
+        setInfo("info2", `${file.name} - ${img.width} × ${img.height} pixels`);
+      }
+
+      preview.src = event.target.result;
+    };
+
+    img.onerror = function () {
+      alert(
+        "Não foi possível carregar a imagem. Teste outro arquivo PNG, JPG/JPEG ou BMP.",
+      );
+    };
+
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function putResult(imageData) {
+  resultCanvas.width = imageData.width;
+  resultCanvas.height = imageData.height;
+  resultCtx.putImageData(imageData, 0, 0);
+  imgDataResult = resultCtx.getImageData(
+    0,
+    0,
+    resultCanvas.width,
+    resultCanvas.height,
+  );
+  matrizResultado = imageDataToMatrix(imgDataResult);
+  drawHistogram(imgDataResult);
+}
+
+function createResultImageData(width, height) {
+  return resultCtx.createImageData(width, height);
+}
+
+function getImageBAlignedToA(width, height) {
+  if (!imgDataB) return null;
+
+  if (imgDataB.width === width && imgDataB.height === height) {
+    return imgDataB;
+  }
+
+  const tempCanvas = document.createElement("canvas");
+  const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
+  tempCanvas.width = width;
+  tempCanvas.height = height;
+  tempCtx.drawImage(sourceCanvas2, 0, 0, width, height);
+  return tempCtx.getImageData(0, 0, width, height);
+}
+
+function switchTab(tabName) {
   document
     .querySelectorAll(".tab-btn")
-    .forEach((b) => b.classList.remove("active"));
+    .forEach((btn) => btn.classList.remove("active"));
   document
     .querySelectorAll(".tab-panel")
-    .forEach((p) => p.classList.remove("active"));
-  document
-    .querySelector(`[onclick="switchTab('${name}')"]`)
-    .classList.add("active");
-  document.getElementById("tab-" + name).classList.add("active");
+    .forEach((panel) => panel.classList.remove("active"));
+
+  const panel = document.getElementById(`tab-${tabName}`);
+  if (panel) panel.classList.add("active");
+
+  const clickedButton = Array.from(document.querySelectorAll(".tab-btn")).find(
+    (btn) =>
+      btn.getAttribute("onclick") &&
+      btn.getAttribute("onclick").includes(`'${tabName}'`),
+  );
+  if (clickedButton) clickedButton.classList.add("active");
 }
 
-const input1 = document.getElementById("buttonimage1");
-const input2 = document.getElementById("buttonimage2");
+function processTwoImages(operation) {
+  if (!ensureImageA() || !ensureImageB()) return;
 
-const preview1 = document.getElementById("preview1");
-const preview2 = document.getElementById("preview2");
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const imageBAligned = getImageBAlignedToA(width, height);
+  const dataA = imgDataA.data;
+  const dataB = imageBAligned.data;
+  const result = createResultImageData(width, height);
+  const res = result.data;
 
-const canvas = document.getElementById("resultCanvas");
-const ctx = canvas.getContext("2d");
-
-let currentImageData = null;
-
-// preview imagem 1
-input1.addEventListener("change", function () {
-  const file = this.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      preview1.src = e.target.result;
-      currentImageData = null;
-    };
-    reader.readAsDataURL(file);
-  }
-});
-
-// preview imagem 2
-input2.addEventListener("change", function () {
-  const file = this.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      preview2.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-});
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function getSourceData(requireBoth = false) {
-  if (requireBoth) {
-    if (preview1.naturalWidth === 0 || preview2.naturalWidth === 0) {
-      alert("Selecione as duas imagens.");
-      return null;
+  for (let i = 0; i < dataA.length; i += 4) {
+    if (operation === "add") {
+      res[i] = clamp(dataA[i] + dataB[i]);
+      res[i + 1] = clamp(dataA[i + 1] + dataB[i + 1]);
+      res[i + 2] = clamp(dataA[i + 2] + dataB[i + 2]);
     }
-    if (
-      preview1.naturalWidth !== preview2.naturalWidth ||
-      preview1.naturalHeight !== preview2.naturalHeight
-    ) {
-      alert("As imagens devem ter a mesma resolução!");
-      return null;
+
+    if (operation === "subtract") {
+      res[i] = clamp(dataA[i] - dataB[i]);
+      res[i + 1] = clamp(dataA[i + 1] - dataB[i + 1]);
+      res[i + 2] = clamp(dataA[i + 2] - dataB[i + 2]);
     }
-  } else {
-    if (preview1.naturalWidth === 0) {
-      alert("Selecione a imagem 1.");
-      return null;
+
+    if (operation === "difference") {
+      res[i] = Math.abs(dataA[i] - dataB[i]);
+      res[i + 1] = Math.abs(dataA[i + 1] - dataB[i + 1]);
+      res[i + 2] = Math.abs(dataA[i + 2] - dataB[i + 2]);
     }
-  }
 
-  const width = preview1.naturalWidth;
-  const height = preview1.naturalHeight;
-  canvas.width = width;
-  canvas.height = height;
-
-  // Canvas offscreen para leitura — nunca toca o canvas de resultado
-  const offscreen = document.createElement("canvas");
-  offscreen.width = width;
-  offscreen.height = height;
-  const offCtx = offscreen.getContext("2d");
-
-  // data1: usa currentImageData se existir, senão lê do preview1
-  let data1;
-  if (currentImageData) {
-    data1 = currentImageData;
-  } else {
-    offCtx.drawImage(preview1, 0, 0);
-    data1 = offCtx.getImageData(0, 0, width, height);
-  }
-
-  // data2: SEMPRE lê do preview2 via offscreen (nunca do canvas principal)
-  let data2 = null;
-  if (requireBoth) {
-    offCtx.clearRect(0, 0, width, height);
-    offCtx.drawImage(preview2, 0, 0);
-    data2 = offCtx.getImageData(0, 0, width, height);
-  }
-
-  return { width, height, data1, data2 };
-}
-
-function commitResult(result) {
-  ctx.putImageData(result, 0, 0);
-  currentImageData = result;
-}
-
-// ─── Operações entre Imagens ─────────────────────────────────────────────────
-
-function processImages(mode) {
-  const src = getSourceData(true);
-  if (!src) return;
-  const { width, height, data1, data2 } = src;
-  const result = ctx.createImageData(width, height);
-
-  for (let i = 0; i < data1.data.length; i += 4) {
-    let r1 = data1.data[i],
-      g1 = data1.data[i + 1],
-      b1 = data1.data[i + 2];
-    let r2 = data2.data[i],
-      g2 = data2.data[i + 1],
-      b2 = data2.data[i + 2];
-
-    if (mode === "add") {
-      result.data[i] = Math.min(255, r1 + r2);
-      result.data[i + 1] = Math.min(255, g1 + g2);
-      result.data[i + 2] = Math.min(255, b1 + b2);
-    } else if (mode === "subtract") {
-      result.data[i] = Math.max(0, r1 - r2);
-      result.data[i + 1] = Math.max(0, g1 - g2);
-      result.data[i + 2] = Math.max(0, b1 - b2);
-    } else if (mode === "difference") {
-      result.data[i] = Math.abs(r1 - r2);
-      result.data[i + 1] = Math.abs(g1 - g2);
-      result.data[i + 2] = Math.abs(b1 - b2);
+    // Multiplicação normalizada para evitar que tudo sature imediatamente.
+    if (operation === "multiply") {
+      res[i] = clamp((dataA[i] * dataB[i]) / 255);
+      res[i + 1] = clamp((dataA[i + 1] * dataB[i + 1]) / 255);
+      res[i + 2] = clamp((dataA[i + 2] * dataB[i + 2]) / 255);
     }
-    result.data[i + 3] = 255;
+
+    // Divisão normalizada. O +1 evita divisão por zero no canal da segunda imagem.
+    if (operation === "divide") {
+      res[i] = clamp((dataA[i] / (dataB[i] + 1)) * 255);
+      res[i + 1] = clamp((dataA[i + 1] / (dataB[i + 1] + 1)) * 255);
+      res[i + 2] = clamp((dataA[i + 2] / (dataB[i + 2] + 1)) * 255);
+    }
+
+    res[i + 3] = dataA[i + 3];
   }
 
-  commitResult(result);
+  putResult(result);
 }
 
 function addImages() {
-  processImages("add");
+  processTwoImages("add");
 }
 function subtractImages() {
-  processImages("subtract");
+  processTwoImages("subtract");
 }
 function differenceImages() {
-  processImages("difference");
+  processTwoImages("difference");
+}
+function multiplyImages() {
+  processTwoImages("multiply");
+}
+function divideImages() {
+  processTwoImages("divide");
 }
 
-// ─── Blending ────────────────────────────────────────────────────────────────
 function blendImages() {
-  const src = getSourceData(true);
-  if (!src) return;
-  const { width, height, data1, data2 } = src;
+  if (!ensureImageA() || !ensureImageB()) return;
 
-  const alpha = parseFloat(document.getElementById("blendAlpha").value);
-  const beta = parseFloat(document.getElementById("blendBeta").value);
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const imageBAligned = getImageBAlignedToA(width, height);
+  const dataA = imgDataA.data;
+  const dataB = imageBAligned.data;
+  const result = createResultImageData(width, height);
+  const res = result.data;
+  const alpha = getNumericValue("blendAlpha", 0.5);
+  const beta = getNumericValue("blendBeta", 0.5);
 
-  if (isNaN(alpha) || isNaN(beta)) {
-    alert("Valores de α e β inválidos!");
-    return;
+  for (let i = 0; i < dataA.length; i += 4) {
+    res[i] = clamp(dataA[i] * alpha + dataB[i] * beta);
+    res[i + 1] = clamp(dataA[i + 1] * alpha + dataB[i + 1] * beta);
+    res[i + 2] = clamp(dataA[i + 2] * alpha + dataB[i + 2] * beta);
+    res[i + 3] = dataA[i + 3];
   }
 
-  const result = ctx.createImageData(width, height);
-
-  for (let i = 0; i < data1.data.length; i += 4) {
-    result.data[i] = Math.min(
-      255,
-      Math.max(0, alpha * data1.data[i] + beta * data2.data[i]),
-    );
-    result.data[i + 1] = Math.min(
-      255,
-      Math.max(0, alpha * data1.data[i + 1] + beta * data2.data[i + 1]),
-    );
-    result.data[i + 2] = Math.min(
-      255,
-      Math.max(0, alpha * data1.data[i + 2] + beta * data2.data[i + 2]),
-    );
-    result.data[i + 3] = 255;
-  }
-
-  commitResult(result);
+  putResult(result);
 }
 
-// ─── Média das duas imagens ───────────────────────────────────────────────────
 function averageImages() {
-  const src = getSourceData(true);
-  if (!src) return;
-  const { width, height, data1, data2 } = src;
-  const result = ctx.createImageData(width, height);
+  if (!ensureImageA() || !ensureImageB()) return;
 
-  for (let i = 0; i < data1.data.length; i += 4) {
-    result.data[i] = Math.round((data1.data[i] + data2.data[i]) / 2);
-    result.data[i + 1] = Math.round(
-      (data1.data[i + 1] + data2.data[i + 1]) / 2,
+  const oldAlpha = document.getElementById("blendAlpha").value;
+  const oldBeta = document.getElementById("blendBeta").value;
+  document.getElementById("blendAlpha").value = "0.5";
+  document.getElementById("blendBeta").value = "0.5";
+  blendImages();
+  document.getElementById("blendAlpha").value = oldAlpha;
+  document.getElementById("blendBeta").value = oldBeta;
+}
+
+function processConstant(operation) {
+  if (!ensureImageA()) return;
+
+  const c = getNumericValue("constantValue", 0);
+  if (operation === "divide" && c === 0) {
+    alert(
+      "Não é possível dividir os pixels por zero. Informe uma constante diferente de 0.",
     );
-    result.data[i + 2] = Math.round(
-      (data1.data[i + 2] + data2.data[i + 2]) / 2,
-    );
-    result.data[i + 3] = 255;
-  }
-
-  commitResult(result);
-}
-
-// ─── Operações Lógicas ───────────────────────────────────────────────────────
-function toBinary(data) {
-  const out = new Uint8ClampedArray(data.data.length);
-  for (let i = 0; i < data.data.length; i += 4) {
-    const gray =
-      data.data[i] * 0.299 +
-      data.data[i + 1] * 0.587 +
-      data.data[i + 2] * 0.114;
-    const val = gray > 127 ? 255 : 0;
-    out[i] = out[i + 1] = out[i + 2] = val;
-    out[i + 3] = 255;
-  }
-  return out;
-}
-
-function logicalOperation(mode) {
-  const needsBoth = mode !== "not";
-  const src = getSourceData(needsBoth);
-  if (!src) return;
-  const { width, height, data1, data2 } = src;
-
-  const bin1 = toBinary(data1);
-  const bin2 = needsBoth ? toBinary(data2) : null;
-
-  const result = ctx.createImageData(width, height);
-
-  for (let i = 0; i < bin1.length; i += 4) {
-    const a = bin1[i];
-    const b = needsBoth ? bin2[i] : 0;
-
-    let val;
-    if (mode === "and") val = a === 255 && b === 255 ? 255 : 0;
-    if (mode === "or") val = a === 255 || b === 255 ? 255 : 0;
-    if (mode === "not") val = a === 255 ? 0 : 255;
-    if (mode === "xor") val = a !== b ? 255 : 0;
-
-    result.data[i] = result.data[i + 1] = result.data[i + 2] = val;
-    result.data[i + 3] = 255;
-  }
-
-  commitResult(result);
-}
-
-// ─── Limiarização ─────────────────────────────────────────────────────────────
-function thresholdImage() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width, height, data1 } = src;
-
-  const threshold = parseInt(document.getElementById("thresholdValue").value);
-  if (isNaN(threshold) || threshold < 0 || threshold > 255) {
-    alert("Limiar deve estar entre 0 e 255.");
     return;
   }
 
-  const result = ctx.createImageData(width, height);
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const dataA = imgDataA.data;
+  const result = createResultImageData(width, height);
+  const res = result.data;
 
-  for (let i = 0; i < data1.data.length; i += 4) {
-    const gray =
-      data1.data[i] * 0.299 +
-      data1.data[i + 1] * 0.587 +
-      data1.data[i + 2] * 0.114;
-    const val = gray > threshold ? 255 : 0;
-    result.data[i] = result.data[i + 1] = result.data[i + 2] = val;
-    result.data[i + 3] = 255;
+  for (let i = 0; i < dataA.length; i += 4) {
+    if (operation === "add") {
+      res[i] = clamp(dataA[i] + c);
+      res[i + 1] = clamp(dataA[i + 1] + c);
+      res[i + 2] = clamp(dataA[i + 2] + c);
+    }
+    if (operation === "subtract") {
+      res[i] = clamp(dataA[i] - c);
+      res[i + 1] = clamp(dataA[i + 1] - c);
+      res[i + 2] = clamp(dataA[i + 2] - c);
+    }
+    if (operation === "multiply") {
+      res[i] = clamp(dataA[i] * c);
+      res[i + 1] = clamp(dataA[i + 1] * c);
+      res[i + 2] = clamp(dataA[i + 2] * c);
+    }
+    if (operation === "divide") {
+      res[i] = clamp(dataA[i] / c);
+      res[i + 1] = clamp(dataA[i + 1] / c);
+      res[i + 2] = clamp(dataA[i + 2] / c);
+    }
+    res[i + 3] = dataA[i + 3];
   }
 
-  commitResult(result);
+  putResult(result);
 }
 
-// ─── Negativo ─────────────────────────────────────────────────────────────────
+function transformImage(type) {
+  if (!ensureImageA()) return;
+
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const dataA = imgDataA.data;
+  const result = createResultImageData(width, height);
+  const res = result.data;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = getIndex(x, y, width);
+
+      if (type === "grayscale") {
+        const gray = clamp(luminance(dataA[i], dataA[i + 1], dataA[i + 2]));
+        res[i] = gray;
+        res[i + 1] = gray;
+        res[i + 2] = gray;
+        res[i + 3] = dataA[i + 3];
+      }
+
+      if (type === "flipH") {
+        const source = getIndex(width - 1 - x, y, width);
+        res[i] = dataA[source];
+        res[i + 1] = dataA[source + 1];
+        res[i + 2] = dataA[source + 2];
+        res[i + 3] = dataA[source + 3];
+      }
+
+      if (type === "flipV") {
+        const source = getIndex(x, height - 1 - y, width);
+        res[i] = dataA[source];
+        res[i + 1] = dataA[source + 1];
+        res[i + 2] = dataA[source + 2];
+        res[i + 3] = dataA[source + 3];
+      }
+    }
+  }
+
+  putResult(result);
+}
+
+function thresholdImage() {
+  if (!ensureImageA()) return;
+
+  const threshold = Math.min(
+    Math.max(getIntValue("thresholdValue", 127), 0),
+    255,
+  );
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const dataA = imgDataA.data;
+  const result = createResultImageData(width, height);
+  const res = result.data;
+
+  for (let i = 0; i < dataA.length; i += 4) {
+    const gray = luminance(dataA[i], dataA[i + 1], dataA[i + 2]);
+    const value = gray >= threshold ? 255 : 0;
+    res[i] = value;
+    res[i + 1] = value;
+    res[i + 2] = value;
+    res[i + 3] = dataA[i + 3];
+  }
+
+  putResult(result);
+}
+
 function negativeImage() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width, height, data1 } = src;
-  const result = ctx.createImageData(width, height);
+  if (!ensureImageA()) return;
 
-  for (let i = 0; i < data1.data.length; i += 4) {
-    result.data[i] = 255 - data1.data[i];
-    result.data[i + 1] = 255 - data1.data[i + 1];
-    result.data[i + 2] = 255 - data1.data[i + 2];
-    result.data[i + 3] = 255;
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const dataA = imgDataA.data;
+  const result = createResultImageData(width, height);
+  const res = result.data;
+
+  for (let i = 0; i < dataA.length; i += 4) {
+    res[i] = 255 - dataA[i];
+    res[i + 1] = 255 - dataA[i + 1];
+    res[i + 2] = 255 - dataA[i + 2];
+    res[i + 3] = dataA[i + 3];
   }
 
-  commitResult(result);
+  putResult(result);
 }
 
-// ─── Equalização de Histograma ───────────────────────────────────────────────
 function equalizeHistogram() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width, height, data1 } = src;
-  const total = width * height;
+  if (!ensureImageA()) return;
 
-  const gray = new Uint8Array(total);
-  const hist = new Array(256).fill(0);
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const dataA = imgDataA.data;
+  const result = createResultImageData(width, height);
+  const eqData = getEqualizedData(dataA, width, height);
+  result.data.set(eqData);
+  putResult(result);
+}
 
-  for (let i = 0, p = 0; i < data1.data.length; i += 4, p++) {
-    const g = Math.round(
-      data1.data[i] * 0.299 +
-        data1.data[i + 1] * 0.587 +
-        data1.data[i + 2] * 0.114,
-    );
-    gray[p] = g;
-    hist[g]++;
+function getEqualizedData(data, width, height) {
+  const result = new Uint8ClampedArray(data.length);
+  const totalPixels = width * height;
+  const histogram = new Array(256).fill(0);
+  const grayValues = new Uint8ClampedArray(totalPixels);
+
+  for (let p = 0, i = 0; i < data.length; i += 4, p++) {
+    const gray = clamp(luminance(data[i], data[i + 1], data[i + 2]));
+    grayValues[p] = gray;
+    histogram[gray]++;
   }
 
   const cdf = new Array(256).fill(0);
-  cdf[0] = hist[0];
-  for (let k = 1; k < 256; k++) cdf[k] = cdf[k - 1] + hist[k];
+  cdf[0] = histogram[0];
+  for (let i = 1; i < 256; i++) cdf[i] = cdf[i - 1] + histogram[i];
 
-  const cdfMin = cdf.find((v) => v > 0);
-
+  const cdfMin = cdf.find((value) => value > 0) || 0;
+  const denominator = totalPixels - cdfMin;
   const map = new Array(256).fill(0);
-  for (let k = 0; k < 256; k++) {
-    map[k] = Math.round(((cdf[k] - cdfMin) / (total - cdfMin)) * 255);
+
+  for (let i = 0; i < 256; i++) {
+    map[i] =
+      denominator === 0 ? i : clamp(((cdf[i] - cdfMin) / denominator) * 255);
   }
 
-  const result = ctx.createImageData(width, height);
-  for (let i = 0, p = 0; i < data1.data.length; i += 4, p++) {
-    const eq = map[gray[p]];
-    result.data[i] = eq;
-    result.data[i + 1] = eq;
-    result.data[i + 2] = eq;
-    result.data[i + 3] = 255;
+  for (let p = 0, i = 0; i < data.length; i += 4, p++) {
+    const value = map[grayValues[p]];
+    result[i] = value;
+    result[i + 1] = value;
+    result[i + 2] = value;
+    result[i + 3] = data[i + 3];
   }
 
-  commitResult(result);
-  drawHistograms(hist, map, gray, total);
+  return result;
 }
 
-function drawHistograms(histBefore, map, grayPixels, total) {
-  const hCanvas = document.getElementById("histogramCanvas");
-  if (!hCanvas) return;
-  const hCtx = hCanvas.getContext("2d");
-  const W = hCanvas.width;
-  const H = hCanvas.height;
+function logicalOperation(type) {
+  if (!ensureImageA()) return;
+  if (type !== "not" && !ensureImageB()) return;
 
-  const histAfter = new Array(256).fill(0);
-  for (let p = 0; p < grayPixels.length; p++) histAfter[map[grayPixels[p]]]++;
+  const threshold = Math.min(
+    Math.max(getIntValue("thresholdValue", 127), 0),
+    255,
+  );
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const imageBAligned =
+    type === "not" ? null : getImageBAlignedToA(width, height);
+  const dataA = imgDataA.data;
+  const dataB = imageBAligned ? imageBAligned.data : null;
+  const result = createResultImageData(width, height);
+  const res = result.data;
 
-  hCtx.clearRect(0, 0, W, H);
+  for (let i = 0; i < dataA.length; i += 4) {
+    const binA =
+      luminance(dataA[i], dataA[i + 1], dataA[i + 2]) >= threshold ? 255 : 0;
+    const binB = dataB
+      ? luminance(dataB[i], dataB[i + 1], dataB[i + 2]) >= threshold
+        ? 255
+        : 0
+      : 0;
+    let value = 0;
 
-  const drawHist = (hist, xOffset, color, label) => {
-    const panelW = W / 2 - 10;
-    const maxVal = Math.max(...hist);
-    hCtx.fillStyle = "#1e293b";
-    hCtx.fillRect(xOffset, 0, panelW, H - 20);
+    if (type === "and") value = binA === 255 && binB === 255 ? 255 : 0;
+    if (type === "or") value = binA === 255 || binB === 255 ? 255 : 0;
+    if (type === "xor") value = binA !== binB ? 255 : 0;
+    if (type === "not") value = binA === 255 ? 0 : 255;
 
-    hCtx.fillStyle = color;
-    for (let k = 0; k < 256; k++) {
-      const barH = Math.round((hist[k] / maxVal) * (H - 25));
-      const x = xOffset + Math.round((k / 256) * panelW);
-      const barW = Math.max(1, Math.round(panelW / 256));
-      hCtx.fillRect(x, H - 20 - barH, barW, barH);
-    }
-
-    hCtx.fillStyle = "#94a3b8";
-    hCtx.font = "11px monospace";
-    hCtx.fillText(label, xOffset + 4, H - 4);
-  };
-
-  drawHist(histBefore, 0, "#60a5fa", "Antes");
-  drawHist(histAfter, W / 2 + 5, "#34d399", "Depois");
-}
-
-// ─── Operações com Constante ─────────────────────────────────────────────────
-function processConstant(mode) {
-  const src = getSourceData();
-  if (!src) return;
-  const { width, height, data1 } = src;
-
-  const c = parseFloat(document.getElementById("constantValue").value);
-  if (isNaN(c)) {
-    alert("Valor inválido!");
-    return;
-  }
-  if (mode === "divide" && c === 0) {
-    alert("Divisão por zero!");
-    return;
+    res[i] = value;
+    res[i + 1] = value;
+    res[i + 2] = value;
+    res[i + 3] = dataA[i + 3];
   }
 
-  const result = ctx.createImageData(width, height);
-
-  for (let i = 0; i < data1.data.length; i += 4) {
-    let r = data1.data[i],
-      g = data1.data[i + 1],
-      b = data1.data[i + 2];
-
-    if (mode === "add") {
-      r = Math.min(255, r + c);
-      g = Math.min(255, g + c);
-      b = Math.min(255, b + c);
-    } else if (mode === "subtract") {
-      r = Math.max(0, r - c);
-      g = Math.max(0, g - c);
-      b = Math.max(0, b - c);
-    } else if (mode === "multiply") {
-      r = Math.min(255, r * c);
-      g = Math.min(255, g * c);
-      b = Math.min(255, b * c);
-    } else if (mode === "divide") {
-      r = Math.min(255, r / c);
-      g = Math.min(255, g / c);
-      b = Math.min(255, b / c);
-    }
-
-    result.data[i] = Math.max(0, r);
-    result.data[i + 1] = Math.max(0, g);
-    result.data[i + 2] = Math.max(0, b);
-    result.data[i + 3] = 255;
-  }
-
-  commitResult(result);
+  putResult(result);
 }
 
-// ─── Transformações ──────────────────────────────────────────────────────────
-function transformImage(mode) {
-  const src = getSourceData();
-  if (!src) return;
-  const { width, height, data1 } = src;
-  const result = ctx.createImageData(width, height);
+function getSpatialFilterData(data, width, height, filterType, orderIndex = 5) {
+  const result = new Uint8ClampedArray(data.length);
+  const targetOrder = Math.min(Math.max(orderIndex - 1, 0), 8);
 
-  if (mode === "grayscale") {
-    for (let i = 0; i < data1.data.length; i += 4) {
-      const gray =
-        data1.data[i] * 0.299 +
-        data1.data[i + 1] * 0.587 +
-        data1.data[i + 2] * 0.114;
-      result.data[i] = result.data[i + 1] = result.data[i + 2] = gray;
-      result.data[i + 3] = data1.data[i + 3];
-    }
-  } else if (mode === "flipH") {
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = (y * width + x) * 4;
-        const s = (y * width + (width - 1 - x)) * 4;
-        result.data[i] = data1.data[s];
-        result.data[i + 1] = data1.data[s + 1];
-        result.data[i + 2] = data1.data[s + 2];
-        result.data[i + 3] = data1.data[s + 3];
-      }
-    }
-  } else if (mode === "flipV") {
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = (y * width + x) * 4;
-        const s = ((height - 1 - y) * width + x) * 4;
-        result.data[i] = data1.data[s];
-        result.data[i + 1] = data1.data[s + 1];
-        result.data[i + 2] = data1.data[s + 2];
-        result.data[i + 3] = data1.data[s + 3];
-      }
-    }
-  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const rArr = [];
+      const gArr = [];
+      const bArr = [];
+      let rSum = 0,
+        gSum = 0,
+        bSum = 0;
 
-  commitResult(result);
-}
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const idx = getClampedIndex(x + kx, y + ky, width, height);
+          const r = data[idx],
+            g = data[idx + 1],
+            b = data[idx + 2];
 
-// ─── Morfologia ──────────────────────────────────────────────────────────────
-
-function _morphToBinary(imageData) {
-  const { data, width, height } = imageData;
-  const bin = new Uint8Array(width * height);
-  for (let i = 0; i < width * height; i++)
-    bin[i] =
-      0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2] >
-      127
-        ? 1
-        : 0;
-  return bin;
-}
-
-function _morphWrite(bin, imageData) {
-  const pixels = imageData.data;
-  for (let i = 0; i < bin.length; i++) {
-    const v = bin[i] ? 255 : 0;
-    pixels[i * 4] = pixels[i * 4 + 1] = pixels[i * 4 + 2] = v;
-    pixels[i * 4 + 3] = 255;
-  }
-}
-
-function _getStructEl() {
-  const size = parseInt(document.getElementById("m-size").value);
-  return size;
-}
-
-function _dilate(bin, w, h, size) {
-  const half = Math.floor(size / 2);
-  const out = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      let hit = 0;
-      outer: for (let dy = -half; dy <= half && !hit; dy++)
-        for (let dx = -half; dx <= half && !hit; dx++) {
-          const nx = Math.max(0, Math.min(w - 1, x + dx));
-          const ny = Math.max(0, Math.min(h - 1, y + dy));
-          if (bin[ny * w + nx]) hit = 1;
+          if (filterType === "mean") {
+            rSum += r;
+            gSum += g;
+            bSum += b;
+          } else {
+            rArr.push(r);
+            gArr.push(g);
+            bArr.push(b);
+          }
         }
-      out[y * w + x] = hit;
+      }
+
+      const out = getIndex(x, y, width);
+      if (filterType === "mean") {
+        result[out] = clamp(rSum / 9);
+        result[out + 1] = clamp(gSum / 9);
+        result[out + 2] = clamp(bSum / 9);
+      } else {
+        rArr.sort((a, b) => a - b);
+        gArr.sort((a, b) => a - b);
+        bArr.sort((a, b) => a - b);
+        let index = 4;
+        if (filterType === "min") index = 0;
+        if (filterType === "max") index = 8;
+        if (filterType === "median") index = 4;
+        if (filterType === "order") index = targetOrder;
+        result[out] = rArr[index];
+        result[out + 1] = gArr[index];
+        result[out + 2] = bArr[index];
+      }
+      result[out + 3] = data[out + 3];
     }
-  return out;
+  }
+
+  return result;
 }
 
-function _erode(bin, w, h, size) {
-  const half = Math.floor(size / 2);
-  const out = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      let all = 1;
-      outer: for (let dy = -half; dy <= half && all; dy++)
-        for (let dx = -half; dx <= half && all; dx++) {
-          const nx = Math.max(0, Math.min(w - 1, x + dx));
-          const ny = Math.max(0, Math.min(h - 1, y + dy));
-          if (!bin[ny * w + nx]) all = 0;
+function spatialFilter(type) {
+  if (!ensureImageA()) return;
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const orderValue = Math.min(Math.max(getIntValue("orderValue", 5), 1), 9);
+  const filtered = getSpatialFilterData(
+    imgDataA.data,
+    width,
+    height,
+    type,
+    orderValue,
+  );
+  const result = createResultImageData(width, height);
+  result.data.set(filtered);
+  putResult(result);
+}
+
+function conservativeFilter() {
+  if (!ensureImageA()) return;
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const filtered = getConservativeSmoothingData(imgDataA.data, width, height);
+  const result = createResultImageData(width, height);
+  result.data.set(filtered);
+  putResult(result);
+}
+
+function getConservativeSmoothingData(data, width, height) {
+  const result = new Uint8ClampedArray(data.length);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const center = getIndex(x, y, width);
+
+      for (const channel of [0, 1, 2]) {
+        const neighbors = [];
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            if (kx === 0 && ky === 0) continue;
+            const idx = getClampedIndex(x + kx, y + ky, width, height);
+            neighbors.push(data[idx + channel]);
+          }
         }
-      out[y * w + x] = all;
+
+        const minValue = Math.min(...neighbors);
+        const maxValue = Math.max(...neighbors);
+        const centerValue = data[center + channel];
+        if (centerValue < minValue) result[center + channel] = minValue;
+        else if (centerValue > maxValue) result[center + channel] = maxValue;
+        else result[center + channel] = centerValue;
+      }
+      result[center + 3] = data[center + 3];
     }
-  return out;
+  }
+
+  return result;
+}
+
+function createGaussianKernel(size, sigma) {
+  const kernel = [];
+  const half = Math.floor(size / 2);
+  let sum = 0;
+
+  for (let y = -half; y <= half; y++) {
+    const row = [];
+    for (let x = -half; x <= half; x++) {
+      const value = Math.exp(-(x * x + y * y) / (2 * sigma * sigma));
+      row.push(value);
+      sum += value;
+    }
+    kernel.push(row);
+  }
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) kernel[y][x] /= sum;
+  }
+
+  return kernel;
+}
+
+function getGaussianData(data, width, height, size, sigma) {
+  const result = new Uint8ClampedArray(data.length);
+  const kernel = createGaussianKernel(size, sigma);
+  const half = Math.floor(size / 2);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let r = 0,
+        g = 0,
+        b = 0;
+      for (let ky = -half; ky <= half; ky++) {
+        for (let kx = -half; kx <= half; kx++) {
+          const idx = getClampedIndex(x + kx, y + ky, width, height);
+          const weight = kernel[ky + half][kx + half];
+          r += data[idx] * weight;
+          g += data[idx + 1] * weight;
+          b += data[idx + 2] * weight;
+        }
+      }
+      const out = getIndex(x, y, width);
+      result[out] = clamp(r);
+      result[out + 1] = clamp(g);
+      result[out + 2] = clamp(b);
+      result[out + 3] = data[out + 3];
+    }
+  }
+
+  return result;
+}
+
+function gaussianFilter() {
+  if (!ensureImageA()) return;
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const sizeRaw = getIntValue("gaussianSize", 5);
+  const size = [3, 5, 7].includes(sizeRaw) ? sizeRaw : 5;
+  const sigma = Math.max(getNumericValue("gaussianSigma", 1), 0.1);
+  const filtered = getGaussianData(imgDataA.data, width, height, size, sigma);
+  const result = createResultImageData(width, height);
+  result.data.set(filtered);
+  putResult(result);
+}
+
+function getEdgeData(data, width, height, edgeType) {
+  const result = new Uint8ClampedArray(data.length);
+  let kernelX = null,
+    kernelY = null;
+
+  if (edgeType === "prewitt") {
+    kernelX = [
+      [-1, 0, 1],
+      [-1, 0, 1],
+      [-1, 0, 1],
+    ];
+    kernelY = [
+      [1, 1, 1],
+      [0, 0, 0],
+      [-1, -1, -1],
+    ];
+  }
+
+  if (edgeType === "sobel") {
+    kernelX = [
+      [-1, 0, 1],
+      [-2, 0, 2],
+      [-1, 0, 1],
+    ];
+    kernelY = [
+      [1, 2, 1],
+      [0, 0, 0],
+      [-1, -2, -1],
+    ];
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let gx = 0,
+        gy = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const idx = getClampedIndex(x + kx, y + ky, width, height);
+          const gray = luminance(data[idx], data[idx + 1], data[idx + 2]);
+          gx += gray * kernelX[ky + 1][kx + 1];
+          gy += gray * kernelY[ky + 1][kx + 1];
+        }
+      }
+      const magnitude = clamp(Math.sqrt(gx * gx + gy * gy));
+      const out = getIndex(x, y, width);
+      result[out] = magnitude;
+      result[out + 1] = magnitude;
+      result[out + 2] = magnitude;
+      result[out + 3] = data[out + 3];
+    }
+  }
+
+  return result;
+}
+
+function getLaplacianData(data, width, height) {
+  const result = new Uint8ClampedArray(data.length);
+  const kernel = [
+    [0, -1, 0],
+    [-1, 4, -1],
+    [0, -1, 0],
+  ];
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const idx = getClampedIndex(x + kx, y + ky, width, height);
+          const gray = luminance(data[idx], data[idx + 1], data[idx + 2]);
+          sum += gray * kernel[ky + 1][kx + 1];
+        }
+      }
+      const value = clamp(Math.abs(sum));
+      const out = getIndex(x, y, width);
+      result[out] = value;
+      result[out + 1] = value;
+      result[out + 2] = value;
+      result[out + 3] = data[out + 3];
+    }
+  }
+
+  return result;
+}
+
+function edgeFilter(type) {
+  if (!ensureImageA()) return;
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const edge =
+    type === "laplacian"
+      ? getLaplacianData(imgDataA.data, width, height)
+      : getEdgeData(imgDataA.data, width, height, type);
+  const result = createResultImageData(width, height);
+  result.data.set(edge);
+  putResult(result);
+}
+
+function imageDataToBinaryArray(data, width, height, threshold) {
+  const binary = new Uint8ClampedArray(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = getIndex(x, y, width);
+      const gray = luminance(data[i], data[i + 1], data[i + 2]);
+      binary[y * width + x] = gray >= threshold ? 255 : 0;
+    }
+  }
+  return binary;
+}
+
+function binaryArrayToImageData(binary, sourceData, width, height) {
+  const result = new Uint8ClampedArray(sourceData.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const i = p * 4;
+      const value = binary[p];
+      result[i] = value;
+      result[i + 1] = value;
+      result[i + 2] = value;
+      result[i + 3] = sourceData[i + 3];
+    }
+  }
+  return result;
+}
+
+function dilateBinary(binary, width, height, size) {
+  const output = new Uint8ClampedArray(binary.length);
+  const half = Math.floor(size / 2);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let hasWhite = false;
+      for (let ky = -half; ky <= half; ky++) {
+        for (let kx = -half; kx <= half; kx++) {
+          const nx = x + kx,
+            ny = y + ky;
+          if (
+            nx >= 0 &&
+            nx < width &&
+            ny >= 0 &&
+            ny < height &&
+            binary[ny * width + nx] === 255
+          ) {
+            hasWhite = true;
+          }
+        }
+      }
+      output[y * width + x] = hasWhite ? 255 : 0;
+    }
+  }
+  return output;
+}
+
+function erodeBinary(binary, width, height, size) {
+  const output = new Uint8ClampedArray(binary.length);
+  const half = Math.floor(size / 2);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let allWhite = true;
+      for (let ky = -half; ky <= half; ky++) {
+        for (let kx = -half; kx <= half; kx++) {
+          const nx = x + kx,
+            ny = y + ky;
+          if (
+            nx < 0 ||
+            nx >= width ||
+            ny < 0 ||
+            ny >= height ||
+            binary[ny * width + nx] !== 255
+          ) {
+            allWhite = false;
+          }
+        }
+      }
+      output[y * width + x] = allWhite ? 255 : 0;
+    }
+  }
+  return output;
+}
+
+function getMorphologyData(operation) {
+  if (!ensureImageA()) return null;
+
+  const width = imgDataA.width;
+  const height = imgDataA.height;
+  const threshold = Math.min(
+    Math.max(getIntValue("thresholdValue", 127), 0),
+    255,
+  );
+  const sizeRaw = getIntValue("m-size", 3);
+  const size = Math.min(Math.max(sizeRaw % 2 === 1 ? sizeRaw : 3, 3), 11);
+  const binary = imageDataToBinaryArray(
+    imgDataA.data,
+    width,
+    height,
+    threshold,
+  );
+  let output = null;
+
+  if (operation === "dilation")
+    output = dilateBinary(binary, width, height, size);
+  if (operation === "erosion")
+    output = erodeBinary(binary, width, height, size);
+  if (operation === "opening")
+    output = dilateBinary(
+      erodeBinary(binary, width, height, size),
+      width,
+      height,
+      size,
+    );
+  if (operation === "closing")
+    output = erodeBinary(
+      dilateBinary(binary, width, height, size),
+      width,
+      height,
+      size,
+    );
+  if (operation === "contour") {
+    const eroded = erodeBinary(binary, width, height, size);
+    output = new Uint8ClampedArray(binary.length);
+    for (let i = 0; i < binary.length; i++)
+      output[i] = binary[i] === 255 && eroded[i] === 0 ? 255 : 0;
+  }
+
+  const result = createResultImageData(width, height);
+  result.data.set(binaryArrayToImageData(output, imgDataA.data, width, height));
+  return result;
 }
 
 function morphDilate() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = _getStructEl();
-  const bin = _morphToBinary(data1);
-  _morphWrite(_dilate(bin, w, h, size), data1);
-  commitResult(data1);
+  const data = getMorphologyData("dilation");
+  if (data) putResult(data);
 }
-
 function morphErode() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = _getStructEl();
-  const bin = _morphToBinary(data1);
-  _morphWrite(_erode(bin, w, h, size), data1);
-  commitResult(data1);
+  const data = getMorphologyData("erosion");
+  if (data) putResult(data);
 }
-
 function morphOpen() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = _getStructEl();
-  const bin = _morphToBinary(data1);
-  _morphWrite(_dilate(_erode(bin, w, h, size), w, h, size), data1);
-  commitResult(data1);
+  const data = getMorphologyData("opening");
+  if (data) putResult(data);
 }
-
 function morphClose() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = _getStructEl();
-  const bin = _morphToBinary(data1);
-  _morphWrite(_erode(_dilate(bin, w, h, size), w, h, size), data1);
-  commitResult(data1);
+  const data = getMorphologyData("closing");
+  if (data) putResult(data);
 }
-
 function morphContour() {
-  const src = getSourceData();
-  if (!src) return;
-  const { width: w, height: h, data1 } = src;
-  const size = _getStructEl();
-  const bin = _morphToBinary(data1);
-  const eroded = _erode(bin, w, h, size);
-  const contour = new Uint8Array(w * h);
-  for (let i = 0; i < bin.length; i++)
-    contour[i] = bin[i] && !eroded[i] ? 1 : 0;
-  _morphWrite(contour, data1);
-  commitResult(data1);
+  const data = getMorphologyData("contour");
+  if (data) putResult(data);
 }
 
-// ─── Sync de labels dos sliders ──────────────────────────────────────────────
+function drawHistogram(imageData) {
+  if (!histogramCtx || !histogramCanvas || !imageData) return;
 
-document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll(".f-slider").forEach((slider) => {
-    const out = document.getElementById(slider.dataset.out);
-    if (!out) return;
-    const fmt = slider.dataset.fmt || "size";
-    const update = () => {
-      const v = slider.value;
-      out.textContent =
-        fmt === "pct"
-          ? v + "%"
-          : fmt === "sigma"
-            ? parseFloat(v).toFixed(1)
-            : v + "×" + v;
-    };
-    slider.addEventListener("input", update);
-    update();
-  });
-});
+  const histogram = new Array(256).fill(0);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = clamp(luminance(data[i], data[i + 1], data[i + 2]));
+    histogram[gray]++;
+  }
 
-// ─── Exportar ────────────────────────────────────────────────────────────────
+  const maxCount = Math.max(...histogram, 1);
+  const w = histogramCanvas.width;
+  const h = histogramCanvas.height;
+  histogramCtx.clearRect(0, 0, w, h);
+  histogramCtx.fillStyle = "#020617";
+  histogramCtx.fillRect(0, 0, w, h);
+  histogramCtx.fillStyle = "#38bdf8";
+
+  const barWidth = w / 256;
+  for (let i = 0; i < 256; i++) {
+    const barHeight = (histogram[i] / maxCount) * h;
+    histogramCtx.fillRect(
+      i * barWidth,
+      h - barHeight,
+      Math.max(barWidth, 1),
+      barHeight,
+    );
+  }
+}
 
 function exportImage() {
-  if (!currentImageData) {
-    alert("Nada para exportar.");
+  if (!imgDataResult) {
+    alert("Nenhum resultado foi gerado ainda.");
     return;
   }
+
   const link = document.createElement("a");
-  link.download = "imagem.png";
-  link.href = canvas.toDataURL();
+  link.download = "resultado_processamento.png";
+  link.href = resultCanvas.toDataURL("image/png");
   link.click();
 }
 
-// ─── Resetar Preview ─────────────────────────────────────────────────────────
-function resetPreview() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  canvas.width = 0;
-  canvas.height = 0;
-  currentImageData = null;
+function resetPreview(clearSources = true) {
+  resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+  resultCanvas.width = 0;
+  resultCanvas.height = 0;
+  imgDataResult = null;
+  matrizResultado = null;
+
+  if (histogramCtx && histogramCanvas)
+    histogramCtx.clearRect(0, 0, histogramCanvas.width, histogramCanvas.height);
+
+  if (clearSources) {
+    document.getElementById("buttonimage1").value = "";
+    document.getElementById("buttonimage2").value = "";
+    document.getElementById("preview1").removeAttribute("src");
+    document.getElementById("preview2").removeAttribute("src");
+    sourceCtx1.clearRect(0, 0, sourceCanvas1.width, sourceCanvas1.height);
+    sourceCtx2.clearRect(0, 0, sourceCanvas2.width, sourceCanvas2.height);
+    sourceCanvas1.width = 0;
+    sourceCanvas1.height = 0;
+    sourceCanvas2.width = 0;
+    sourceCanvas2.height = 0;
+    imgDataA = null;
+    imgDataB = null;
+    matrizA = null;
+    matrizB = null;
+    setInfo("info1", "Nenhuma imagem carregada.");
+    setInfo("info2", "Nenhuma imagem carregada.");
+  }
 }
+
+function useResultAsImage1() {
+  if (!imgDataResult) {
+    alert("Ainda não existe imagem resultante para usar como Imagem 1.");
+    return;
+  }
+
+  sourceCanvas1.width = resultCanvas.width;
+  sourceCanvas1.height = resultCanvas.height;
+  sourceCtx1.putImageData(imgDataResult, 0, 0);
+  imgDataA = sourceCtx1.getImageData(
+    0,
+    0,
+    sourceCanvas1.width,
+    sourceCanvas1.height,
+  );
+  matrizA = imageDataToMatrix(imgDataA);
+
+  document.getElementById("preview1").src =
+    sourceCanvas1.toDataURL("image/png");
+  setInfo(
+    "info1",
+    `Resultado atual - ${sourceCanvas1.width} × ${sourceCanvas1.height} pixels`,
+  );
+}
+
+function updateSliderLabels() {
+  document
+    .querySelectorAll('input[type="range"][data-out]')
+    .forEach((slider) => {
+      const output = document.getElementById(slider.dataset.out);
+      const update = () => {
+        if (output) output.textContent = `${slider.value}×${slider.value}`;
+      };
+      slider.addEventListener("input", update);
+      update();
+    });
+}
+
+document.getElementById("buttonimage1").addEventListener("change", function () {
+  loadImageFromInput(
+    this,
+    document.getElementById("preview1"),
+    sourceCanvas1,
+    sourceCtx1,
+    true,
+  );
+});
+
+document.getElementById("buttonimage2").addEventListener("change", function () {
+  loadImageFromInput(
+    this,
+    document.getElementById("preview2"),
+    sourceCanvas2,
+    sourceCtx2,
+    false,
+  );
+});
+
+updateSliderLabels();
