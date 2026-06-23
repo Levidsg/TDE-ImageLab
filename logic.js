@@ -1,6 +1,3 @@
-// Processador Digital de Imagens
-// Interface adaptada para o HTML/CSS novo e cálculos mantidos em JavaScript puro.
-
 const sourceCanvas1 = document.getElementById("sourceCanvas1");
 const sourceCtx1 = sourceCanvas1.getContext("2d", { willReadFrequently: true });
 const sourceCanvas2 = document.getElementById("sourceCanvas2");
