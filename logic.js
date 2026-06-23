@@ -214,14 +214,14 @@ function processTwoImages(operation) {
       res[i + 2] = Math.abs(dataA[i + 2] - dataB[i + 2]);
     }
 
-    // Multiplicação normalizada para evitar que tudo sature imediatamente.
+    // Multiplicação normalizada para evitar que sature
     if (operation === "multiply") {
       res[i] = clamp((dataA[i] * dataB[i]) / 255);
       res[i + 1] = clamp((dataA[i + 1] * dataB[i + 1]) / 255);
       res[i + 2] = clamp((dataA[i + 2] * dataB[i + 2]) / 255);
     }
 
-    // Divisão normalizada. O +1 evita divisão por zero no canal da segunda imagem.
+    // Divisão +1 evita divisão por zero
     if (operation === "divide") {
       res[i] = clamp((dataA[i] / (dataB[i] + 1)) * 255);
       res[i + 1] = clamp((dataA[i + 1] / (dataB[i + 1] + 1)) * 255);
@@ -976,7 +976,7 @@ function exportImage() {
   link.click();
 }
 
-function resetPreview(clearSources = true) {
+function resetPreview(clearSources = false) {
   resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
   resultCanvas.width = 0;
   resultCanvas.height = 0;
